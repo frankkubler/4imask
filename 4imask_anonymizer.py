@@ -357,6 +357,7 @@ class VideoAnonymizer(QMainWindow):
         #     return
 
         # # Reset the flag when updates are not paused
+        
         # self.paused_frame_displayed = False
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
