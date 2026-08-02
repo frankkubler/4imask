@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "4imask"
-version = "1.0.3"
+version = "1.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "imutils" },

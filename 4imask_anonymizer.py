@@ -12,6 +12,7 @@ from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
 from PySide6.QtCore import QTimer, QUrl, Qt
 from apps.worker import AnonymizationWorker
 from apps.utils import resource_path
+from apps.version import __version__
 from apps.authorization import (
     AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
 import logging
@@ -29,7 +30,7 @@ except ImportError:
 class VideoAnonymizer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.version = "1.0.2"
+        self.version = __version__
         self.setWindowIcon(QIcon(resource_path("res/icons/4imask.png")))
         self.setWindowTitle("4iMask Anonymizer")
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
