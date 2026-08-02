@@ -12,7 +12,7 @@ from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
 from PySide6.QtCore import QTimer, QUrl, Qt
 from apps.worker import AnonymizationWorker
 from apps.utils import resource_path
-from apps.version import __version__
+from apps.version import get_version, get_copyright_years
 from apps.authorization import (
     AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
 import logging
@@ -30,7 +30,7 @@ except ImportError:
 class VideoAnonymizer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.version = __version__
+        self.version = get_version()
         self.setWindowIcon(QIcon(resource_path("res/icons/4imask.png")))
         self.setWindowTitle("4iMask Anonymizer")
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
@@ -158,7 +158,8 @@ class VideoAnonymizer(QMainWindow):
         self.license_link.setOpenExternalLinks(False)
         self.license_link.linkActivated.connect(self.open_license)
 
-        self.version_label = QLabel(f"2025 4iMask Anonymizer Version: {self.version}")
+        self.version_label = QLabel(
+            f"{get_copyright_years()} 4iMask Anonymizer Version: {self.version}")
         last_line.addWidget(self.version_label)
         last_line.addWidget(self.license_link)
         last_line.setAlignment(self.license_link, Qt.AlignRight)
