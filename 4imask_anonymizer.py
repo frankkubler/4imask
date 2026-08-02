@@ -1,3 +1,4 @@
+import apps.compat  # noqa: F401  must stay first, see apps/compat.py
 import sys
 import cv2
 import qdarktheme
@@ -11,6 +12,8 @@ from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
 from PySide6.QtCore import QTimer, QUrl, Qt
 from apps.worker import AnonymizationWorker
 from apps.utils import resource_path
+from apps.authorization import (
+    AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
 import logging
 from datetime import datetime
 import platform
@@ -30,11 +33,7 @@ class VideoAnonymizer(QMainWindow):
         self.setWindowIcon(QIcon(resource_path("res/icons/4imask.png")))
         self.setWindowTitle("4iMask Anonymizer")
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
-        variable_name = "USERDOMAIN"
-        value = os.getenv(variable_name)
-        authorized_domains = open(resource_path("res/.dummy"), "r").read().splitlines()
-        if value not in authorized_domains:
-            QMessageBox.warning(self, "Warning", "You are not authorized to use this application.")
+        if not self.check_authorization():
             sys.exit()
 
         self.ffmpeg_path = self.get_ffmpeg_path()
@@ -161,10 +160,31 @@ class VideoAnonymizer(QMainWindow):
 
         self.video_path = None
         self.cap = None
+        # Renseigne par on_worker_error : anonymization_complete s'en sert pour ne pas
+        # annoncer une reussite alors que le traitement s'est interrompu sur une erreur.
+        self._worker_error = None
         self.timer = QTimer()
         # self.timer.timeout.connect(self.update_frame)
         self.pause_updates = False
         self.is_playing = False
+
+    def check_authorization(self):
+        """Applique le garde-fou d'usage decrit dans apps/authorization.py.
+
+        La liste de domaines n'est pas versionnee : quand elle est absente, ce
+        qui est le cas d'une execution depuis les sources, aucune restriction
+        n'est appliquee.
+        """
+        domain = os.getenv(DOMAIN_ENV_VAR)
+        authorized_domains = load_authorized_domains(resource_path(AUTHORIZED_DOMAINS_FILE))
+        if authorized_domains is None:
+            self.logger.info("No embedded domain list, running without usage restriction.")
+            return True
+        if is_authorized(domain, authorized_domains):
+            return True
+        self.logger.warning(f"Unauthorized domain: {domain!r}")
+        QMessageBox.warning(self, "Warning", "You are not authorized to use this application.")
+        return False
 
     def select_video(self):
         if hasattr(self, 'worker') and self.worker.isRunning():
@@ -197,9 +217,11 @@ class VideoAnonymizer(QMainWindow):
             self.logger.info(f'Replacewith: {replacewith}')
             self.worker.model = model
             self.worker.replacewith = replacewith
+            self._worker_error = None
             self.worker.progress_updated.connect(self.update_progress)
             self.worker.time_remaining_updated.connect(self.update_time)
             self.worker.anonymization_complete.connect(self.anonymization_complete)
+            self.worker.error_occurred.connect(self.on_worker_error)
             self.worker.frame_emited.connect(self.update_frame)
             self.worker.start()
             self.select_button.setEnabled(False)
@@ -330,9 +352,22 @@ class VideoAnonymizer(QMainWindow):
         time_str = f"Estimated Time Remaining: {int(hours)}h {int(minutes)}m {int(seconds)}s"
         self.time_label.setText(time_str)
 
+    def on_worker_error(self, message):
+        """Affiche une erreur remontee par le thread de traitement.
+
+        Le worker ne peut pas creer de widget lui-meme : il emet error_occurred et
+        c'est ici, dans le thread GUI, que la boite de dialogue est construite.
+        """
+        self._worker_error = message
+        self.logger.error(f'Anonymization failed for {self.video_path}: {message}')
+        QMessageBox.critical(self, "Error", message)
+
     def anonymization_complete(self):
-        self.notification_label.setText("Anonymization complete.")
-        self.logger.info(f'Anonymization complete for {self.video_path}, time remaining : {self.time_label.text()}')
+        if self._worker_error:
+            self.notification_label.setText(f"Anonymization failed: {self._worker_error}")
+        else:
+            self.notification_label.setText("Anonymization complete.")
+            self.logger.info(f'Anonymization complete for {self.video_path}, time remaining : {self.time_label.text()}')
         self.select_button.setEnabled(True)
         self.pause_button.setEnabled(False)
         self.resume_button.setEnabled(False)
@@ -341,6 +376,12 @@ class VideoAnonymizer(QMainWindow):
         self.yolo_checkbox.setEnabled(True)
         self.centerface_checkbox.setEnabled(True)
         self.yunet_checkbox.setEnabled(True)
+        # Reactivees ici aussi : start_anonymization les desactive, et sans cela elles
+        # restaient grisees jusqu'au redemarrage de l'application.
+        self.blur_checkbox.setEnabled(True)
+        self.mask_checkbox.setEnabled(True)
+        self.mosaic_checkbox.setEnabled(True)
+        self.format_combo.setEnabled(True)
         self.play_button.setText("Play Preview")
         self.is_playing = False
 
@@ -395,6 +436,8 @@ class VideoAnonymizer(QMainWindow):
             self.worker.replacewith = replacewith
             self.logger.info(f'Model  : {model}')
             self.logger.info(f'Replacewith : {replacewith}')
+            self._worker_error = None
+            self.worker.error_occurred.connect(self.on_worker_error)
             self.worker.frame_emited.connect(self.update_frame)
             self.worker.start()
             self.timer.timeout.connect(self.update_frame)

@@ -30,19 +30,26 @@ def draw_detections(frame, x1, y1, x2, y2,
     # Clip bb coordinates to valid frame region
     y1, y2 = max(0, y1), min(frame.shape[0] - 1, y2)
     x1, x2 = max(0, x1), min(frame.shape[1] - 1, x2)
+    # Une boite degeneree apres clipping n'a rien a masquer : cv2.blur leverait
+    # une erreur sur un ksize nul, et le rectangle solide serait invisible.
+    if x2 <= x1 or y2 <= y1:
+        return frame
     if replacewith == 'solid':
         ovcolor = (0, 0, 0)  # Couleur noire pour masquer
         cv2.rectangle(frame, (x1, y1), (x2, y2), ovcolor, -1)
     elif replacewith == 'blur':
         bf = 2  # blur factor (number of pixels in each dimension that the face will be reduced to)
-        blurred_box = cv2.blur(
-            frame[y1:y2, x1:x2],
-            (abs(x2 - x1) // bf, abs(y2 - y1) // bf)
-        )
-        if ellipse:
+        # ksize doit valoir au moins 1 : une boite de moins de 2 px fait echouer cv2.blur
+        # sur une assertion, ce qui tuait le thread de traitement.
+        ksize = (max(1, abs(x2 - x1) // bf), max(1, abs(y2 - y1) // bf))
+        blurred_box = cv2.blur(frame[y1:y2, x1:x2], ksize)
+        r_rad, c_rad = (y2 - y1) // 2, (x2 - x1) // 2
+        # Un rayon nul fait diviser par zero dans skimage : sur une boite trop
+        # petite pour porter une ellipse, on floute le rectangle entier.
+        if ellipse and r_rad > 0 and c_rad > 0:
             roibox = frame[y1:y2, x1:x2]
             # Get y and x coordinate lists of the "bounding ellipse"
-            ey, ex = skimage_ellipse((y2 - y1) // 2, (x2 - x1) // 2, (y2 - y1) // 2, (x2 - x1) // 2)
+            ey, ex = skimage_ellipse(r_rad, c_rad, r_rad, c_rad)
             roibox[ey, ex] = blurred_box[ey, ex]
             frame[y1:y2, x1:x2] = roibox
         else:

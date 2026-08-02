@@ -11,7 +11,8 @@
 - Change detection model (YOLOv11, CenterFace, YUNET)
 
 ## Prerequisites
-- Python 3.x
+- Python 3.12 or later
+- [uv](https://docs.astral.sh/uv/) for dependency management
 - PySide6
 - OpenCV
 - imutils
@@ -32,17 +33,42 @@ Clone the repository and install the dependencies:
 ```sh
 git clone https://github.com/your-username/4imask.git
 cd 4imask
-pip install -r requirements.txt
+uv sync
 ```
+`uv` creates the virtual environment and installs the exact versions pinned in `uv.lock`.
 
 ## Usage
 To launch the application, run:
 ```sh
-python 4imask_anonymizer.py
+uv run 4imask_anonymizer.py
 ```
 
+## Development
+Install the development tools (pytest, ruff, pip-audit, pyinstaller):
+```sh
+uv sync --group dev
+uv run pytest        # tests
+uv run ruff check    # linting
+uv run pip-audit     # dependency CVE audit
+```
+
+## Usage restriction
+Released builds can be restricted to a list of Windows domains. The list is **not**
+versioned: it is written at build time from the `AUTHORIZED_DOMAINS` repository
+secret (one domain per line) into `res/.dummy`, which `.gitignore` excludes.
+
+When no list is embedded — running from source, or building without the secret —
+no restriction applies. The check is a usage guard, not a security measure: the
+list ships inside the binary and the environment variable it reads is
+user-controlled.
+
 ## Compilation
-Ensure all dependencies are installed using `pip install -r requirements.txt`. Then, you can run the application with the command above.
+The Windows executable is built by the `PyInstaller build` GitHub workflow on every `v*` tag.
+To build locally:
+```sh
+uv sync --group dev
+uv run pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon "res/icons/4itec.ico" --hidden-import ultralytics --hidden-import skimage._shared.geometry --collect-submodules openvino --collect-binaries openvino --collect-data openvino --splash "res/icons/4itec.png"
+```
 
 ## Contribute
 Contributions are welcome. Please open an issue or submit a pull request.

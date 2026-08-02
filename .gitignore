@@ -173,3 +173,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Liste des domaines autorises : ecrite au build depuis le secret
+# AUTHORIZED_DOMAINS, jamais versionnee (voir apps/authorization.py).
+res/.dummy

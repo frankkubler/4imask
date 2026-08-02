@@ -1,0 +1,37 @@
+[project]
+name = "4imask"
+version = "1.0.3"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "imutils>=0.5.4",
+    "onnx>=1.22.0",
+    "onnxruntime>=1.28.0",
+    "opencv-python>=5.0.0.93",
+    "openvino>=2026.2.1",
+    "pyqtdarktheme>=2.1.0",
+    "pyside6>=6.11.1",
+    "scikit-image>=0.26.0",
+    "torch>=2.13.0",
+    "ultralytics>=8.4.115",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.9.0",
+    "pip-audit>=2.9.0",
+    "pyinstaller>=6.11.0",
+]
+
+[tool.pytest.ini_options]
+# Le projet n'est pas installe comme paquet : la racine doit etre sur sys.path
+# pour que les tests puissent importer apps.*
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+# Code tiers repris tel quel de OpenCV Zoo et ORB-HD/deface : le reformater
+# romprait la tracabilite avec l'amont.
+extend-exclude = ["apps/yunet.py", "apps/centerface.py"]

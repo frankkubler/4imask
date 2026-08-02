@@ -1,12 +1,59 @@
+name: PyInstaller build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
 jobs:
   pyinstaller-build:
     runs-on: windows-latest
     steps:
-      - name: Create Executable
-        uses: sayyid5416/pyinstaller@v1.2.0
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python_ver: '3.11.9'
-          spec: '4imask_anonymizer.spec'
-          requirements: 'requirements.txt'
-          upload_exe_with_name: '4imask_anonymizer'
-          options: --name "4imask_anonymizer", --windowed, 
+          enable-cache: true
+
+      # La version de Python vient de .python-version, pas d'une valeur codee en dur
+      # dans ce fichier : elle ne peut donc plus diverger de requires-python.
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev
+
+      # La liste des domaines autorises n'est pas versionnee (voir
+      # apps/authorization.py). Sans le secret, le binaire est construit sans
+      # restriction d'usage plutot que d'echouer.
+      - name: Write authorized domains
+        shell: bash
+        env:
+          AUTHORIZED_DOMAINS: ${{ secrets.AUTHORIZED_DOMAINS }}
+        run: |
+          if [ -n "$AUTHORIZED_DOMAINS" ]; then
+            printf '%s\n' "$AUTHORIZED_DOMAINS" > res/.dummy
+            echo "Wrote $(wc -l < res/.dummy) authorized domain(s)."
+          else
+            echo "::warning::AUTHORIZED_DOMAINS secret is not set, building without usage restriction."
+          fi
+
+      # Les options reprennent la derniere ligne de pyinstaller_cmd.txt. Le .spec
+      # n'est pas utilise ici : il est exclu par .gitignore, donc absent du depot.
+      - name: Create executable
+        run: >
+          uv run pyinstaller 4imask_anonymizer.py
+          --name 4imask_anonymizer
+          --noconsole
+          --add-data "res:res"
+          --icon "res/icons/4itec.ico"
+          --hidden-import ultralytics
+          --hidden-import skimage._shared.geometry
+          --collect-submodules openvino
+          --collect-binaries openvino
+          --collect-data openvino
+          --splash "res/icons/4itec.png"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: 4imask_anonymizer
+          path: dist/
