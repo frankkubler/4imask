@@ -1,12 +1,12 @@
-pyinstaller 4imask_anonymizer.py --console --add-data "res:res" --icon="res/icons/4itec.ico" --hidden-import=ultralytics.yolo
+pyinstaller 4imask_anonymizer.py --console --add-data "res:res" --icon="res/icons/4imask.ico" --hidden-import=ultralytics.yolo
 
-pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4itec.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino
+pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino
 
-pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4itec.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry
+pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry
 
-pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4itec.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/4itec.png"
+pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/splash.png"
 
 # pyproject.toml porte la version affichee par l'application : sans --add-data,
 # le bundle affiche "inconnue" alors que le lancement depuis les sources est correct.
 # Sous Windows, remplacer les ":" des --add-data par des ";".
-pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "pyproject.toml:." --icon="res/icons/4itec.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/4itec.png"
+pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "pyproject.toml:." --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/splash.png"
