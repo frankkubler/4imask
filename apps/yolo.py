@@ -27,7 +27,7 @@ class YOLOModel:
         
         results = self._model.predict(image_path, conf=conf, iou=iou,
                                     verbose=False, device=self.device,
-                                    half=True, agnostic_nms=True)
+                                    quantize=16, agnostic_nms=True)
 
         has_faces = any(result.boxes for result in results)
 
