@@ -99,6 +99,13 @@ class VideoAnonymizer(QMainWindow):
         self.detection_models_layout.addWidget(self.yolo_checkbox)
         self.detection_models_layout.addWidget(self.centerface_checkbox)
         self.detection_models_layout.addWidget(self.yunet_checkbox)
+        # Volontairement hors du groupe exclusif ci-dessus : ce detecteur ne
+        # remplace pas le modele de visage, il s'y ajoute pour couvrir les
+        # personnes de dos, qu'aucun detecteur de visage ne peut trouver.
+        self.pose_checkbox = QCheckBox("Back-facing (pose)")
+        self.pose_checkbox.setToolTip(
+            "Ajoute la detection des tetes vues de dos. Ralentit le traitement.")
+        self.detection_models_layout.addWidget(self.pose_checkbox)
         self.layout.addLayout(self.detection_models_layout)
 
         self.buttons_layout = QHBoxLayout()
@@ -216,6 +223,7 @@ class VideoAnonymizer(QMainWindow):
             self.logger.info(f'Model: {model}')
             self.logger.info(f'Replacewith: {replacewith}')
             self.worker.model = model
+            self.worker.use_pose = self.pose_checkbox.isChecked()
             self.worker.replacewith = replacewith
             self._worker_error = None
             self.worker.progress_updated.connect(self.update_progress)
@@ -235,6 +243,7 @@ class VideoAnonymizer(QMainWindow):
             self.yolo_checkbox.setEnabled(False)
             self.centerface_checkbox.setEnabled(False)
             self.yunet_checkbox.setEnabled(False)
+            self.pose_checkbox.setEnabled(False)
         else:
             QMessageBox.warning(self, "Warning", "Please select a video first.")
 
@@ -332,6 +341,7 @@ class VideoAnonymizer(QMainWindow):
             self.yolo_checkbox.setEnabled(True)
             self.centerface_checkbox.setEnabled(True)
             self.yunet_checkbox.setEnabled(True)
+            self.pose_checkbox.setEnabled(True)
             self.play_button.setEnabled(True)  # Enable play button after stopping
             self.play_button.setText("Play Preview")
 
@@ -376,6 +386,7 @@ class VideoAnonymizer(QMainWindow):
         self.yolo_checkbox.setEnabled(True)
         self.centerface_checkbox.setEnabled(True)
         self.yunet_checkbox.setEnabled(True)
+        self.pose_checkbox.setEnabled(True)
         # Reactivees ici aussi : start_anonymization les desactive, et sans cela elles
         # restaient grisees jusqu'au redemarrage de l'application.
         self.blur_checkbox.setEnabled(True)
@@ -433,6 +444,7 @@ class VideoAnonymizer(QMainWindow):
                 self.logger.info("Worker stopped.")
             self.worker = AnonymizationWorker(self.video_path, output_format, self.mask_size, write_output=False)
             self.worker.model = model
+            self.worker.use_pose = self.pose_checkbox.isChecked()
             self.worker.replacewith = replacewith
             self.logger.info(f'Model  : {model}')
             self.logger.info(f'Replacewith : {replacewith}')
@@ -452,6 +464,7 @@ class VideoAnonymizer(QMainWindow):
             self.yolo_checkbox.setEnabled(False)
             self.centerface_checkbox.setEnabled(False)
             self.yunet_checkbox.setEnabled(False)
+            self.pose_checkbox.setEnabled(False)
         else:
             QMessageBox.warning(self, "Warning", "Please select a video first.")
 
@@ -469,6 +482,7 @@ class VideoAnonymizer(QMainWindow):
         self.yolo_checkbox.setEnabled(True)
         self.centerface_checkbox.setEnabled(True)
         self.yunet_checkbox.setEnabled(True)
+        self.pose_checkbox.setEnabled(True)
 
         # self.resume_button.setEnabled(True)
         # self.pause_button.setEnabled(True)

@@ -64,6 +64,78 @@ def draw_detections(frame, x1, y1, x2, y2,
     return frame
 
 
+def openvino_device():
+    """Device a passer a ultralytics pour l'inference OpenVINO.
+
+    Renvoie 'intel:gpu' quand un GPU Intel est expose par OpenVINO, sinon None
+    pour laisser ultralytics choisir. Sans cette precision, ultralytics compile
+    le modele en mode 'AUTO', qui retombe sur le CPU : le GPU integre reste
+    inutilise alors qu'il decharge nettement le processeur.
+    """
+    try:
+        import openvino as ov
+        devices = ov.Core().available_devices
+    except Exception:
+        return None
+    has_gpu = any(d == "GPU" or d.startswith("GPU.") for d in devices)
+    return "intel:gpu" if has_gpu else None
+
+
+def merge_boxes(boxes, overlap: float = 0.3):
+    """Regroupe les boites qui designent la meme tete et renvoie leur englobante.
+
+    Quand plusieurs detecteurs tournent ensemble, une meme tete est trouvee
+    plusieurs fois. Masquer chaque boite separement floute la zone deux fois et
+    superpose deux ellipses, ce qui se voit. On fusionne donc avant de masquer.
+
+    Le recouvrement est rapporte a la plus petite des deux boites, et non a leur
+    union : une boite de visage serree est souvent incluse dans une boite de tete
+    plus large, un IoU classique les separerait a tort.
+    """
+    boxes = [tuple(int(v) for v in b) for b in boxes]
+    if len(boxes) < 2:
+        return boxes
+
+    # Groupes fusionnes de proche en proche : deux boites qui ne se touchent pas
+    # se retrouvent ensemble si une troisieme recouvre les deux.
+    groups = []
+    for box in boxes:
+        merged = box
+        rest = []
+        for group in groups:
+            if _overlaps(merged, group, overlap):
+                merged = (min(merged[0], group[0]), min(merged[1], group[1]),
+                          max(merged[2], group[2]), max(merged[3], group[3]))
+            else:
+                rest.append(group)
+        rest.append(merged)
+        groups = rest
+    return groups
+
+
+def _overlaps(a, b, threshold):
+    """Vrai si l'intersection couvre assez de la plus petite des deux boites."""
+    ix = min(a[2], b[2]) - max(a[0], b[0])
+    iy = min(a[3], b[3]) - max(a[1], b[1])
+    if ix <= 0 or iy <= 0:
+        return False
+    smallest = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return smallest > 0 and (ix * iy) / smallest >= threshold
+
+
+def mask_boxes(boxes, frame, replacewith: str = 'blur', mask_size: float = 1.3,
+               ellipse: bool = True, mosaicsize: int = 15):
+    """Applique le masquage a une liste de boites, quel que soit le detecteur.
+
+    Utilise pour combiner plusieurs modeles sur une meme frame : chaque modele
+    fournit ses boites, le masquage est applique une seule fois par boite.
+    """
+    for x1, y1, x2, y2 in boxes:
+        frame = draw_detections(frame, x1, y1, x2, y2, replacewith, mask_size,
+                                ellipse, mosaicsize)
+    return frame
+
+
 def scale_bb(x0, y0, x1, y1, mask_scale=1.3):
     s = mask_scale - 1.0
     h, w = y1 - y0, x1 - x0

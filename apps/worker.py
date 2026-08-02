@@ -8,6 +8,8 @@ import platform
 from apps.yunet import YuNet
 from apps.centerface import CenterFace
 from apps.yolo import YOLOModel
+from apps.pose import PoseModel
+from apps.utils import mask_boxes, merge_boxes
 import logging
 
 
@@ -30,6 +32,9 @@ class AnonymizationWorker(QThread):
         self.replacewith = 'blur'  # Default value
         self.mask_size = mask_size
         self.model = 'yolo'
+        # Detecteur de tete additionnel, combine au modele de visage choisi :
+        # il rattrape les personnes de dos, que les detecteurs de visage ratent.
+        self.use_pose = False
         self.write_output = write_output
         self.logger.info("worker initialized")
 
@@ -82,7 +87,11 @@ class AnonymizationWorker(QThread):
                 yolo_ = None
                 centerface = None
                 self.yunet = None
+
+            pose = PoseModel() if self.use_pose else None
             self.logger.info(f'Anonymizing video with {self.model} model, mask size: {self.mask_size}, replace with: {self.replacewith}')
+            if pose is not None:
+                self.logger.info('Pose model combined for back-facing people')
             start_time = time.time()
             frame_count = 0
             while cap.isOpened():
@@ -96,7 +105,19 @@ class AnonymizationWorker(QThread):
                     break
                 frame, _ = self.correct_orientation(frame, cap)
                 frame = imutils.resize(frame, width=target_width)
-                if yolo_ is not None:
+                if pose is not None:
+                    # Les deux detecteurs voient la meme personne de face. On
+                    # rassemble leurs boites et on masque une seule fois, sinon
+                    # la zone commune est floutee deux fois et les ellipses se
+                    # superposent.
+                    boxes = self.face_boxes(frame, yolo_, centerface)
+                    heads = pose.detect_heads(frame, 0.25, 0.45)
+                    if heads is not None:
+                        boxes.extend(heads)
+                    if boxes:
+                        frame = mask_boxes(merge_boxes(boxes), frame, self.replacewith,
+                                           self.mask_size, ellipse=True, mosaicsize=15)
+                elif yolo_ is not None:
                     faces = yolo_.detect_faces(frame, 0.25, 0.45)
                     if faces is not None:
                         frame = yolo_.mask_faces(faces, frame, 20, self.replacewith, self.mask_size)
@@ -151,6 +172,28 @@ class AnonymizationWorker(QThread):
             if out is not None:
                 out.release()
             self.anonymization_complete.emit()
+
+    def face_boxes(self, frame, yolo_, centerface):
+        """Boites du detecteur de visage actif, sans masquer la frame.
+
+        Necessaire pour la fusion avec le modele de pose : les trois detecteurs
+        masquent normalement eux-memes, ce qui empeche de regrouper les boites
+        avant de les appliquer. Les formats different, YuNet donnant x, y, w, h
+        la ou les deux autres donnent des coins.
+        """
+        if yolo_ is not None:
+            faces = yolo_.detect_faces(frame, 0.25, 0.45)
+            return list(faces) if faces is not None else []
+        if centerface is not None:
+            detections, _ = centerface(frame, threshold=0.25)
+            return [tuple(det[:4].astype(int)) for det in detections]
+        if self.yunet is not None:
+            h, w = frame.shape[:2]
+            self.yunet.setInputSize((w, h))
+            detections = self.yunet.infer(frame)
+            return [(int(d[0]), int(d[1]), int(d[0] + d[2]), int(d[1] + d[3]))
+                    for d in detections]
+        return []
 
     def correct_orientation(self, frame, cap):
         rotate_code = None

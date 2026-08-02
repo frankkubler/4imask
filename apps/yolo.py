@@ -4,7 +4,7 @@ import numpy as np
 from torch.cuda import (is_available as cuda_is_available,
                         device_count as cuda_device_count)
 
-from apps.utils import resource_path, draw_detections
+from apps.utils import resource_path, draw_detections, openvino_device
 import logging
 
 class YOLOModel:
@@ -16,11 +16,11 @@ class YOLOModel:
             self.model_path = resource_path("res/models/yolov11n-face.pt")
             self.logger.info("Using CUDA for YOLO model")
         else:
-            self.device = None
+            self.device = openvino_device()
             self.model_path = resource_path("res/models/yolov11n-face_openvino_model/" )
-            self.logger.info("Using openvino for YOLO model")
+            self.logger.info(f"Using openvino for YOLO model on {self.device or 'auto'}")
         
-        self._model = YOLO(self.model_path, task="detect", verbose=False)
+        self._model = YOLO(self.model_path, task="detect", verbose=True)
         pass
 
     def detect_faces(self, image_path: str, conf: float, iou: float, max_width: int = None, max_height: int = None) -> List[tuple[int, ...]] | None:
