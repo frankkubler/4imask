@@ -42,6 +42,10 @@ SWITCH_HINT = {
 
 TRANSLATIONS = {
     "fr": {
+        # --- Écran de démarrage ---
+        "splash_loading_models": "Chargement des modèles de détection…",
+        "splash_starting": "Démarrage…",
+
         # --- Sélection de la vidéo ---
         "select_video": "Sélectionner une vidéo",
         "select_video_dialog": "Sélectionner une vidéo",
@@ -109,6 +113,10 @@ TRANSLATIONS = {
         "privacy_link": "Confidentialité / RGPD",
     },
     "en": {
+        # --- Splash screen ---
+        "splash_loading_models": "Loading detection models…",
+        "splash_starting": "Starting…",
+
         # --- Video selection ---
         "select_video": "Select Video",
         "select_video_dialog": "Select Video",

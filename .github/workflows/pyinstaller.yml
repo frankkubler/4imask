@@ -38,6 +38,8 @@ jobs:
 
       # Les options reprennent la derniere ligne de pyinstaller_cmd.txt. Le .spec
       # n'est pas utilise ici : il est exclu par .gitignore, donc absent du depot.
+      # Pas de --splash : l'ecran de demarrage est celui de Qt (apps/splash.py),
+      # qui s'affiche aussi bien depuis les sources que depuis le binaire.
       - name: Create executable
         run: >
           uv run pyinstaller 4imask_anonymizer.py
@@ -53,7 +55,6 @@ jobs:
           --collect-submodules openvino
           --collect-binaries openvino
           --collect-data openvino
-          --splash "res/icons/splash.png"
 
       - name: Upload executable
         uses: actions/upload-artifact@v4

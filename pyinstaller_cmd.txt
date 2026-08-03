@@ -11,6 +11,7 @@ pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon="res/ic
 # Sous Windows, remplacer les ":" des --add-data par des ";".
 pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "pyproject.toml:." --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/splash.png"
 
-# Commande courante. S'ajoutent deux documents ouverts depuis l'interface : docs/ pour
-# l'information RGPD, et LICENSE pour le lien AGPL, jusqu'ici absent du bundle.
-pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "docs:docs" --add-data "LICENSE:." --add-data "pyproject.toml:." --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry --splash="res/icons/splash.png"
+# Commande courante. --splash a ete retire : l'ecran de demarrage est desormais celui de
+# Qt (apps/splash.py). Il s'affiche aussi depuis les sources, montre l'etape en cours dans
+# la langue de l'utilisateur, et l'image reste embarquee par --add-data "res:res".
+pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "docs:docs" --add-data "LICENSE:." --add-data "pyproject.toml:." --icon="res/icons/4imask.ico" --hidden-import=ultralytics --collect-submodules=openvino --collect-binaries=openvino --collect-data=openvino --hidden-import=skimage._shared.geometry

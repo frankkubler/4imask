@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QProgressBar, QComboBox, QMessageBox, QCheckBox)
 from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
 from PySide6.QtCore import QTimer, QUrl, Qt
-from apps.worker import AnonymizationWorker
 from apps.utils import resource_path
 from apps.version import VERSION_UNKNOWN, get_version, get_copyright_years
 from apps.authorization import (
@@ -19,19 +18,33 @@ from apps import i18n
 from apps.flags import LanguageFlagButton
 from apps.i18n import tr
 from apps.privacy import PrivacyDialog, short_notice, should_show_notice
+from apps.splash import Splash
 import logging
 from datetime import datetime
 import platform
 
-try:
-    import pyi_splash
-    pyi_splash.update_text("Loading...")
-    pyi_splash.close()
-except ImportError:
-    print("pyi_splash not found, continuing without splash screen.")
-
 # Nom du produit : il reste identique dans toutes les langues.
 APPLICATION_TITLE = "4iMask Anonymizer"
+
+# apps.worker tire torch, ultralytics et openvino : environ quatre secondes,
+# l'essentiel du temps de demarrage. L'import est differe jusqu'a ce que l'ecran
+# de demarrage soit affiche (voir apps/splash.py), au lieu de le faire ici ou
+# rien n'est encore visible a l'ecran.
+AnonymizationWorker = None
+
+
+def load_processing():
+    """Charge le moteur d'anonymisation, une seule fois.
+
+    Appelee pendant l'ecran de demarrage dans le flux normal, et au plus tard a
+    la construction de la fenetre : celle-ci reste utilisable telle quelle, sans
+    passer par mainloop().
+    """
+    global AnonymizationWorker
+    if AnonymizationWorker is None:
+        from apps.worker import AnonymizationWorker as worker_class
+        AnonymizationWorker = worker_class
+    return AnonymizationWorker
 
 
 class VideoAnonymizer(QMainWindow):
@@ -43,6 +56,9 @@ class VideoAnonymizer(QMainWindow):
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
         if not self.check_authorization():
             sys.exit()
+
+        # Sans effet quand mainloop() l'a deja fait derriere l'ecran de demarrage.
+        load_processing()
 
         self.ffmpeg_path = self.get_ffmpeg_path()
         self.ffmpeg_env = FFmpegPathManager(self.ffmpeg_path)
@@ -300,6 +316,10 @@ class VideoAnonymizer(QMainWindow):
         if is_authorized(domain, authorized_domains):
             return True
         self.logger.warning(f"Unauthorized domain: {domain!r}")
+        # Le controle a lieu pendant la construction de la fenetre, donc alors que
+        # l'ecran de demarrage est encore affiche : l'avertissement passerait
+        # dessous, et l'application se fermerait sans que rien ne soit lisible.
+        Splash.close_all()
         QMessageBox.warning(self, tr("warning_title"), tr("warn_not_authorized"))
         return False
 
@@ -637,8 +657,18 @@ def mainloop():
     app.setWindowIcon(QIcon(path))
     app.setStyle('Fusion')
     qdarktheme.setup_theme("light")
+
+    # L'ecran de demarrage couvre le chargement des modeles. Il est donc affiche
+    # avant load_processing(), et ferme par finish() une fois la fenetre peinte.
+    splash = Splash()
+    splash.show()
+    splash.show_message(tr("splash_loading_models"))
+    load_processing()
+    splash.show_message(tr("splash_starting"))
+
     window = VideoAnonymizer()
     window.show()
+    splash.finish(window)
     sys.exit(app.exec())
 
 

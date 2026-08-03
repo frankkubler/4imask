@@ -96,8 +96,11 @@ The Windows executable is built by the `PyInstaller build` GitHub workflow on ev
 To build locally:
 ```sh
 uv sync --group dev
-uv run pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "docs:docs" --add-data "LICENSE:." --add-data "pyproject.toml:." --icon "res/icons/4imask.ico" --hidden-import ultralytics --hidden-import skimage._shared.geometry --collect-submodules openvino --collect-binaries openvino --collect-data openvino --splash "res/icons/splash.png"
+uv run pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "docs:docs" --add-data "LICENSE:." --add-data "pyproject.toml:." --icon "res/icons/4imask.ico" --hidden-import ultralytics --hidden-import skimage._shared.geometry --collect-submodules openvino --collect-binaries openvino --collect-data openvino
 ```
+No `--splash`: the startup screen is a Qt `QSplashScreen` (`apps/splash.py`), shown
+while the detection models load. It works when running from source too, and reports
+the current step in the user's language.
 
 ## Contribute
 Contributions are welcome. Please open an issue or submit a pull request.

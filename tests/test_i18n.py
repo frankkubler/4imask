@@ -197,9 +197,17 @@ def test_aucun_message_en_dur_dans_les_boites_de_dialogue():
 
 @pytest.fixture
 def fenetre(application, reglages, monkeypatch):
-    """Fenetre principale isolee : ni controle de domaine, ni notice au demarrage."""
+    """Fenetre principale isolee : ni controle de domaine, ni notice au demarrage.
+
+    La notice est neutralisee et pas seulement acquittee : la fenetre la
+    programme via QTimer.singleShot, et le premier traitement d'evenements venu
+    -- y compris celui d'un autre test -- ouvrirait alors un dialogue modal qui
+    bloquerait la suite indefiniment.
+    """
     module = importlib.import_module("4imask_anonymizer")
     monkeypatch.setattr(module.VideoAnonymizer, "check_authorization", lambda self: True)
+    monkeypatch.setattr(
+        module.VideoAnonymizer, "maybe_show_privacy_notice", lambda self: None)
     i18n.settings().setValue(i18n.SETTINGS_LANG_KEY, "fr")
     fenetre = module.VideoAnonymizer()
     yield fenetre
