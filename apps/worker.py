@@ -9,7 +9,7 @@ from apps.yunet import YuNet
 from apps.centerface import CenterFace
 from apps.yolo import YOLOModel
 from apps.pose import PoseModel
-from apps.utils import mask_boxes, merge_boxes
+from apps.utils import ALREADY_SCALED, mask_boxes, merge_scaled_boxes
 # Les messages emis par error_occurred finissent dans une boite de dialogue :
 # ils suivent la langue de l'interface, comme le reste des textes visibles.
 from apps.i18n import tr
@@ -118,8 +118,14 @@ class AnonymizationWorker(QThread):
                     if heads is not None:
                         boxes.extend(heads)
                     if boxes:
-                        frame = mask_boxes(merge_boxes(boxes), frame, self.replacewith,
-                                           self.mask_size, ellipse=True, mosaicsize=15)
+                        # Le gabarit est applique avant la fusion : deux boites qui
+                        # se superposeront une fois dessinees sont regroupees en une
+                        # seule. Elles sortent d'ici a leur taille finale, d'ou
+                        # ALREADY_SCALED plutot que self.mask_size.
+                        frame = mask_boxes(
+                            merge_scaled_boxes(boxes, self.mask_size), frame,
+                            self.replacewith, ALREADY_SCALED, ellipse=True,
+                            mosaicsize=15)
                 elif yolo_ is not None:
                     faces = yolo_.detect_faces(frame, 0.25, 0.45)
                     if faces is not None:

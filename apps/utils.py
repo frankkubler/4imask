@@ -123,6 +123,29 @@ def _overlaps(a, b, threshold):
     return smallest > 0 and (ix * iy) / smallest >= threshold
 
 
+# Facteur neutre pour draw_detections : la boite est masquee telle qu'elle est
+# fournie. A passer apres merge_scaled_boxes, qui a deja applique le gabarit.
+ALREADY_SCALED = 1.0
+
+
+def merge_scaled_boxes(boxes, mask_size: float, overlap: float = 0.3):
+    """Fusionne les boites telles qu'elles seront dessinees, gabarit compris.
+
+    merge_boxes decide sur les boites brutes, alors que le masquage les agrandit
+    ensuite de mask_size -- soit un facteur 2,2 au reglage par defaut. Deux
+    boites jugees distinctes a ce stade, typiquement un visage detecte et la tete
+    deduite de la posture, decales l'un par rapport a l'autre, se recouvrent
+    largement une fois agrandies : la meme tete recevait alors deux ellipses
+    superposees, bien visibles. En agrandissant avant de fusionner, la decision
+    porte sur ce que l'utilisateur voit.
+
+    Les boites renvoyees sont deja au gabarit final : elles doivent etre masquees
+    avec ALREADY_SCALED, sans quoi l'agrandissement s'appliquerait deux fois.
+    """
+    scaled = [tuple(scale_bb(*box, mask_size)) for box in boxes]
+    return merge_boxes(scaled, overlap)
+
+
 def mask_boxes(boxes, frame, replacewith: str = 'blur', mask_size: float = 1.3,
                ellipse: bool = True, mosaicsize: int = 15):
     """Applique le masquage a une liste de boites, quel que soit le detecteur.
