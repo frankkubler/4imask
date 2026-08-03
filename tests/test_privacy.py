@@ -3,36 +3,23 @@
 Deux classes d'erreur sont visees, qu'aucun autre test ne rattrape et qui ne
 produisent aucun message a l'execution :
 
-- une traduction oubliee, qui n'apparait qu'en changeant de langue dans l'interface ;
+- une notice non traduite, qui n'apparait qu'en changeant de langue dans l'interface ;
 - un document embarque manquant, qui ne se voit que dans l'executable distribue,
   ou le bouton "document complet" ouvre alors le vide.
+
+Les libelles de la fenetre et le choix de la langue relevent de tests/test_i18n.py.
 """
 
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings
 
-from apps import privacy
+from apps import i18n, privacy
 
 RACINE = Path(__file__).resolve().parent.parent
 
 
-@pytest.fixture
-def reglages(tmp_path, monkeypatch):
-    """Isole les preferences du test : ne pas ecrire dans celles de l'utilisateur."""
-    fichier = tmp_path / "settings.ini"
-    monkeypatch.setattr(
-        privacy, "_settings", lambda: QSettings(str(fichier), QSettings.IniFormat))
-
-
 # --- Parite des traductions -------------------------------------------------
-
-def test_toutes_les_langues_ont_les_memes_cles():
-    reference = set(privacy.UI_TEXT[privacy.FALLBACK_LANGUAGE])
-    for code, _ in privacy.LANGUAGES:
-        assert set(privacy.UI_TEXT[code]) == reference, f"Cles manquantes en {code}"
-
 
 @pytest.mark.parametrize("code", [code for code, _ in privacy.LANGUAGES])
 def test_chaque_langue_fournit_bandeau_et_notice(code):
@@ -48,30 +35,12 @@ def test_le_bandeau_annonce_le_perimetre_du_masquage(code):
     assert "badge" in bandeau
 
 
-def test_repli_sur_l_anglais_si_une_cle_manque(monkeypatch):
-    monkeypatch.setitem(privacy.UI_TEXT, "fr", {})
-    assert privacy.text("close", "fr") == privacy.UI_TEXT[privacy.FALLBACK_LANGUAGE]["close"]
-
-
-# --- Choix de la langue -----------------------------------------------------
-
-def test_langue_systeme_toujours_geree():
-    assert privacy.system_language() in dict(privacy.LANGUAGES)
-
-
-def test_langue_stockee_prioritaire_sur_la_locale(reglages):
-    privacy.set_language("fr")
-    assert privacy.current_language() == "fr"
-
-
-def test_langue_stockee_invalide_ignoree(reglages):
-    privacy._settings().setValue(privacy.SETTINGS_LANG_KEY, "de")
-    assert privacy.current_language() == privacy.system_language()
-
-
-def test_langue_non_geree_refusee(reglages):
-    with pytest.raises(ValueError):
-        privacy.set_language("de")
+@pytest.mark.parametrize("code", [code for code, _ in privacy.LANGUAGES])
+def test_la_notice_cite_le_libelle_reel_de_l_option_de_pose(code):
+    """Une notice qui nomme une option introuvable a l'ecran n'informe personne."""
+    libelle = i18n.TRANSLATIONS[code]["pose_option"]
+    assert libelle in privacy.SHORT_NOTICE[code]
+    assert libelle in privacy.FULL_NOTICE_HTML[code]
 
 
 # --- Acquittement de la notice ----------------------------------------------
@@ -86,14 +55,21 @@ def test_notice_masquee_apres_acquittement(reglages):
 
 
 def test_notice_reaffichee_apres_evolution_du_texte(reglages):
-    privacy._settings().setValue(privacy.SETTINGS_ACK_KEY, privacy.NOTICE_VERSION - 1)
+    i18n.settings().setValue(privacy.SETTINGS_ACK_KEY, privacy.NOTICE_VERSION - 1)
     assert privacy.should_show_notice()
 
 
 def test_acquittement_illisible_ne_fait_pas_planter(reglages):
     """Une preference corrompue reaffiche la notice plutot que d'interrompre l'app."""
-    privacy._settings().setValue(privacy.SETTINGS_ACK_KEY, "n/a")
+    i18n.settings().setValue(privacy.SETTINGS_ACK_KEY, "n/a")
     assert privacy.should_show_notice()
+
+
+def test_notice_suivie_dans_la_langue_courante(reglages):
+    i18n.set_language("fr")
+    assert privacy.short_notice() == privacy.SHORT_NOTICE["fr"]
+    i18n.set_language("en")
+    assert privacy.short_notice() == privacy.SHORT_NOTICE["en"]
 
 
 # --- Documents complets -----------------------------------------------------

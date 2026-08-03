@@ -132,11 +132,11 @@ background.
 
 | Option | Robustness | Note |
 |---|---|---|
-| **Mask** (solid box) | Highest | The information under the box is destroyed. |
+| **Solid box** | Highest | The information under the box is destroyed. |
 | **Mosaic** (pixelation) | Medium | Coarse pixelation retains information that can be exploited by reconstruction. |
 | **Blur** | Lowest | A light blur can be partially inverted; increasing the mask size strengthens the effect without guaranteeing it. |
 
-For external distribution or publication, the **Mask** option is recommended.
+For external distribution or publication, the **Solid box** option is recommended.
 
 The pose option infers the position of the head from posture. When posture does not allow
 it to be located, the upper part of the person is masked instead: the mask may then cover
@@ -175,7 +175,7 @@ rights.
 2. check that no face or head is left unmasked, in particular at scene changes, when
    people enter the frame, during fast movements and for people filmed from behind;
 3. check the identifying elements listed in 6.3;
-4. if in doubt, reprocess at a higher resolution or with the **Mask** option, or complete
+4. if in doubt, reprocess at a higher resolution or with the **Solid box** option, or complete
    with manual masking in a video editor;
 5. record this review if the video is intended for wide distribution.
 
@@ -275,15 +275,17 @@ directly in the interface:
   disk, what the application does not do and the limitations of masking;
 - the **"Privacy / GDPR"** link at the bottom of the window reopens that notice at any
   time and opens this document;
-- a **language selector** (French / English) displays all of this information in either
+- a **clickable flag** at the bottom of the window switches the whole interface between
+  French and English, this information included. The flag shown is the one of the active
   language. The initial language follows the machine locale; the user's choice is
   persisted and also determines which version of the full document is opened from the
   notice.
 
-The displayed text is maintained in `apps/privacy.py` and must stay consistent with this
-document and its French version `docs/RGPD.md`: any substantive change must be reflected
-in both languages and both documents, together with an increment of `NOTICE_VERSION` so
-that users see the notice again.
+The notice text is maintained in `apps/privacy.py`, the interface labels in
+`apps/i18n.py`. Both must stay consistent with this document and its French version
+`docs/RGPD.md`: any substantive change must be reflected in both languages and both
+documents, together with an increment of `NOTICE_VERSION` so that users see the notice
+again.
 
 ---
 

@@ -43,6 +43,11 @@ To launch the application, run:
 uv run 4imask_anonymizer.py
 ```
 
+The interface is bilingual: click the flag at the bottom of the window to switch
+between French and English. The flag shows the language currently in use, and the
+choice is remembered across launches. Labels live in `apps/i18n.py` — the single
+place to edit or extend translations.
+
 ## Development
 Install the development tools (pytest, ruff, pip-audit, pyinstaller):
 ```sh
@@ -78,8 +83,8 @@ the produced video before releasing it.
 
 The application shows this information to the user: a permanent banner in the main
 window, a detailed notice on first launch, and a *Privacy / GDPR* link to reopen it at
-any time. All of it is available **in French and in English**, selectable from the main
-window; the initial language follows the machine locale (see `apps/privacy.py`).
+any time. All of it is available **in French and in English**, like the rest of the
+interface; the initial language follows the machine locale (see `apps/privacy.py`).
 
 Full data-protection assessment — data processed, retention, roles, limits of the
 anonymisation and the controller's obligations:

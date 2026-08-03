@@ -12,12 +12,13 @@ from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
 from PySide6.QtCore import QTimer, QUrl, Qt
 from apps.worker import AnonymizationWorker
 from apps.utils import resource_path
-from apps.version import get_version, get_copyright_years
+from apps.version import VERSION_UNKNOWN, get_version, get_copyright_years
 from apps.authorization import (
     AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
-from apps.privacy import (
-    LANGUAGES, PrivacyDialog, current_language, set_language, short_notice,
-    should_show_notice, text as privacy_text)
+from apps import i18n
+from apps.flags import LanguageFlagButton
+from apps.i18n import tr
+from apps.privacy import PrivacyDialog, short_notice, should_show_notice
 import logging
 from datetime import datetime
 import platform
@@ -29,13 +30,16 @@ try:
 except ImportError:
     print("pyi_splash not found, continuing without splash screen.")
 
+# Nom du produit : il reste identique dans toutes les langues.
+APPLICATION_TITLE = "4iMask Anonymizer"
+
 
 class VideoAnonymizer(QMainWindow):
     def __init__(self):
         super().__init__()
         self.version = get_version()
         self.setWindowIcon(QIcon(resource_path("res/icons/4imask.png")))
-        self.setWindowTitle("4iMask Anonymizer")
+        self.setWindowTitle(APPLICATION_TITLE)
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
         if not self.check_authorization():
             sys.exit()
@@ -45,8 +49,21 @@ class VideoAnonymizer(QMainWindow):
         self.ffmpeg_env.set_ffmpeg_env_path()
         self.logger.info(f"FFmpeg path in environment: {self.ffmpeg_env.is_ffmpeg_path_in_env()}")
         self.mask_size = 1.6
-        self.setWindowTitle("4iMask Anonymizer")
         self.setGeometry(100, 100, 800, 600)
+
+        # Etat affiche, defini avant les widgets : retranslate() le relit pour
+        # reconstruire les libelles qui en dependent (fichier choisi, temps
+        # restant, resultat du traitement) au lieu de traduire du texte deja pose.
+        self.video_path = None
+        self.cap = None
+        # Renseigne par on_worker_error : anonymization_complete s'en sert pour ne pas
+        # annoncer une reussite alors que le traitement s'est interrompu sur une erreur.
+        self._worker_error = None
+        self._remaining_seconds = None
+        self._notification = None
+        self.timer = QTimer()
+        self.pause_updates = False
+        self.is_playing = False
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -54,7 +71,7 @@ class VideoAnonymizer(QMainWindow):
         self.layout = QVBoxLayout()
         self.central_widget.setLayout(self.layout)
 
-        self.privacy_banner = QLabel(short_notice())
+        self.privacy_banner = QLabel()
         self.privacy_banner.setWordWrap(True)
         self.privacy_banner.setObjectName("privacyBanner")
         self.privacy_banner.setStyleSheet(
@@ -62,13 +79,13 @@ class VideoAnonymizer(QMainWindow):
             " border: 1px solid #e0b400; border-radius: 4px; padding: 6px; }")
         self.layout.addWidget(self.privacy_banner)
 
-        self.select_button = QPushButton("Select Video")
+        self.select_button = QPushButton()
         self.select_button.clicked.connect(self.select_video)
-        self.video_label = QLabel("No video selected.")
+        self.video_label = QLabel()
         self.layout.addWidget(self.select_button)
         self.layout.addWidget(self.video_label)
 
-        self.format_label = QLabel("Select Output Format:")
+        self.format_label = QLabel()
         self.layout.addWidget(self.format_label)
 
         self.format_combo = QComboBox()
@@ -76,11 +93,11 @@ class VideoAnonymizer(QMainWindow):
         self.layout.addWidget(self.format_combo)
 
         self.anonymization_options_layout = QHBoxLayout()
-        self.mosaic_checkbox = QCheckBox("Mosaic")
+        self.mosaic_checkbox = QCheckBox()
         self.mosaic_checkbox.setEnabled(True)
-        self.blur_checkbox = QCheckBox("Blur")
+        self.blur_checkbox = QCheckBox()
         self.blur_checkbox.setChecked(True)
-        self.mask_checkbox = QCheckBox("Mask")
+        self.mask_checkbox = QCheckBox()
         self.mask_checkbox.setEnabled(True)
         self.mosaic_checkbox.toggled.connect(self.update_checkboxes)
         self.blur_checkbox.toggled.connect(self.update_checkboxes)
@@ -88,7 +105,7 @@ class VideoAnonymizer(QMainWindow):
         self.anonymization_options_layout.addWidget(self.mosaic_checkbox)
         self.anonymization_options_layout.addWidget(self.blur_checkbox)
         self.anonymization_options_layout.addWidget(self.mask_checkbox)
-        self.spin_label = QLabel("Mask Size:")
+        self.spin_label = QLabel()
         self.anonymization_options_layout.addWidget(self.spin_label)
         self.spinbox = QDoubleSpinBox()
         self.spinbox.setMinimum(1.0)
@@ -114,33 +131,31 @@ class VideoAnonymizer(QMainWindow):
         # Volontairement hors du groupe exclusif ci-dessus : ce detecteur ne
         # remplace pas le modele de visage, il s'y ajoute pour couvrir les
         # personnes de dos, qu'aucun detecteur de visage ne peut trouver.
-        self.pose_checkbox = QCheckBox("Back-facing (pose)")
-        self.pose_checkbox.setToolTip(
-            "Ajoute la detection des tetes vues de dos. Ralentit le traitement.")
+        self.pose_checkbox = QCheckBox()
         self.detection_models_layout.addWidget(self.pose_checkbox)
         self.layout.addLayout(self.detection_models_layout)
 
         self.buttons_layout = QHBoxLayout()
-        self.start_button = QPushButton("Start Anonymization")
+        self.start_button = QPushButton()
         self.start_button.clicked.connect(self.start_anonymization)
         self.buttons_layout.addWidget(self.start_button)
 
-        self.pause_button = QPushButton("Pause")
+        self.pause_button = QPushButton()
         self.pause_button.clicked.connect(self.pause_anonymization)
         self.pause_button.setEnabled(False)
         self.buttons_layout.addWidget(self.pause_button)
 
-        self.resume_button = QPushButton("Resume")
+        self.resume_button = QPushButton()
         self.resume_button.clicked.connect(self.resume_anonymization)
         self.resume_button.setEnabled(False)
         self.buttons_layout.addWidget(self.resume_button)
 
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton()
         self.stop_button.clicked.connect(self.stop_anonymization)
         self.stop_button.setEnabled(False)
         self.buttons_layout.addWidget(self.stop_button)
 
-        self.play_button = QPushButton("Play Preview")
+        self.play_button = QPushButton()
         self.play_button.clicked.connect(self.toggle_play_pause)
         self.buttons_layout.addWidget(self.play_button)
 
@@ -149,14 +164,14 @@ class VideoAnonymizer(QMainWindow):
         self.progress_bar = QProgressBar()
         self.layout.addWidget(self.progress_bar)
 
-        self.time_label = QLabel("Estimated Time Remaining: --")
+        self.time_label = QLabel()
         self.layout.addWidget(self.time_label)
 
         # self.layout.addWidget(self.play_button)
-        self.notification_label = QLabel("")
+        self.notification_label = QLabel()
         self.layout.addWidget(self.notification_label)
 
-        self.original_label = QLabel("Original Video")
+        self.original_label = QLabel()
         self.layout.addWidget(self.original_label)
         # Ajouter un espaceur flexible pour pousser l'étiquette de version vers le bas
         spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
@@ -165,7 +180,7 @@ class VideoAnonymizer(QMainWindow):
         last_line = QHBoxLayout()
 
         # Ajouter un lien hypertexte pour ouvrir le fichier LICENSE
-        self.license_link = QLabel('<a href="#">AGPL LICENSE</a>')
+        self.license_link = QLabel()
         self.license_link.setOpenExternalLinks(False)
         self.license_link.linkActivated.connect(self.open_license)
 
@@ -174,60 +189,91 @@ class VideoAnonymizer(QMainWindow):
         self.privacy_link.setOpenExternalLinks(False)
         self.privacy_link.linkActivated.connect(self.show_privacy_notice)
 
-        # Langue de l'information RGPD (le reste de l'interface est en anglais)
-        self.language_combo = QComboBox()
-        for code, label in LANGUAGES:
-            self.language_combo.addItem(label, code)
-        self.language_combo.setCurrentIndex(self.language_combo.findData(current_language()))
-        self.language_combo.currentIndexChanged.connect(self.on_language_changed)
+        # Bascule français / anglais de toute l'interface, d'un clic sur le drapeau.
+        self.language_button = LanguageFlagButton(self)
 
-        self.version_label = QLabel(
-            f"{get_copyright_years()} 4iMask Anonymizer Version: {self.version}")
+        self.version_label = QLabel()
         last_line.addWidget(self.version_label)
         last_line.addStretch(1)
-        last_line.addWidget(self.language_combo)
         last_line.addWidget(self.privacy_link)
         last_line.addWidget(self.license_link)
+        last_line.addWidget(self.language_button)
         last_line.setAlignment(self.privacy_link, Qt.AlignRight)
         last_line.setAlignment(self.license_link, Qt.AlignRight)
         self.layout.addLayout(last_line)
         # self.anonymized_label = QLabel("Anonymized Video")
         # self.layout.addWidget(self.anonymized_label)
 
-        self.video_path = None
-        self.cap = None
-        # Renseigne par on_worker_error : anonymization_complete s'en sert pour ne pas
-        # annoncer une reussite alors que le traitement s'est interrompu sur une erreur.
-        self._worker_error = None
-        self.timer = QTimer()
         # self.timer.timeout.connect(self.update_frame)
-        self.pause_updates = False
-        self.is_playing = False
 
-        self.refresh_privacy_texts()
+        self.retranslate()
+        i18n.notifier.language_changed.connect(self.on_language_changed)
 
         # Affichée une fois la fenêtre peinte, au démarrage de la boucle d'évènements.
         QTimer.singleShot(0, self.maybe_show_privacy_notice)
 
-    def refresh_privacy_texts(self):
-        """Réapplique le bandeau et le lien RGPD dans la langue courante."""
+    def retranslate(self):
+        """Réécrit tous les libellés dans la langue courante.
+
+        Appelée à la construction et à chaque bascule du drapeau : les textes qui
+        dépendent de l'état de l'application sont reconstruits depuis cet état,
+        et non retraduits depuis ce qui est affiché.
+        """
         self.privacy_banner.setText(short_notice())
-        self.privacy_link.setText(f'<a href="#">{privacy_text("link")}</a>')
+        self.privacy_link.setText(f'<a href="#">{tr("privacy_link")}</a>')
+        self.license_link.setText(f'<a href="#">{tr("license_link")}</a>')
 
-    def on_language_changed(self, index):
-        language = self.language_combo.itemData(index)
-        if language:
-            set_language(language)
-            self.refresh_privacy_texts()
+        self.select_button.setText(tr("select_video"))
+        self.video_label.setText(
+            os.path.basename(self.video_path) if self.video_path
+            else tr("no_video_selected"))
+        self.format_label.setText(tr("output_format"))
 
-    def on_dialog_language_changed(self, language):
-        """La langue choisie depuis la notice est reportée sur la fenêtre."""
-        index = self.language_combo.findData(language)
-        if index >= 0:
-            self.language_combo.blockSignals(True)
-            self.language_combo.setCurrentIndex(index)
-            self.language_combo.blockSignals(False)
-        self.refresh_privacy_texts()
+        self.mosaic_checkbox.setText(tr("mosaic"))
+        self.blur_checkbox.setText(tr("blur"))
+        self.mask_checkbox.setText(tr("solid_mask"))
+        self.spin_label.setText(tr("mask_size"))
+
+        # Les noms des modeles de detection ne sont pas traduits : ce sont des
+        # noms propres, que l'utilisateur retrouve dans la documentation amont.
+        self.pose_checkbox.setText(tr("pose_option"))
+        self.pose_checkbox.setToolTip(tr("pose_tooltip"))
+
+        self.start_button.setText(tr("start"))
+        self.pause_button.setText(tr("pause"))
+        self.resume_button.setText(tr("resume"))
+        self.stop_button.setText(tr("stop"))
+        self.play_button.setText(
+            tr("stop_preview") if self.is_playing else tr("play_preview"))
+
+        self.time_label.setText(self.time_remaining_text())
+        self.notification_label.setText(self.notification_text())
+        # Ce meme label porte l'image de l'apercu : lui poser du texte
+        # l'effacerait. Il n'est retraduit que tant qu'il ne montre rien.
+        if self.original_label.pixmap().isNull():
+            self.original_label.setText(tr("original_video"))
+
+        version = self.version if self.version != VERSION_UNKNOWN else tr("version_unknown")
+        self.version_label.setText(
+            tr("version_label", years=get_copyright_years(), version=version))
+
+    def time_remaining_text(self):
+        if self._remaining_seconds is None:
+            return tr("time_remaining_unknown")
+        hours, remainder = divmod(self._remaining_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return tr("time_remaining", hours=int(hours), minutes=int(minutes),
+                  seconds=int(seconds))
+
+    def notification_text(self):
+        if self._notification == "failed":
+            return tr("failed", error=self._worker_error)
+        if self._notification == "complete":
+            return tr("complete")
+        return ""
+
+    def on_language_changed(self, _language):
+        self.retranslate()
 
     def maybe_show_privacy_notice(self):
         """Notice RGPD au premier lancement, ou après évolution de son contenu."""
@@ -235,9 +281,9 @@ class VideoAnonymizer(QMainWindow):
             self.show_privacy_notice(startup=True)
 
     def show_privacy_notice(self, _link=None, startup=False):
-        dialog = PrivacyDialog(self, startup=startup)
-        dialog.language_changed.connect(self.on_dialog_language_changed)
-        dialog.exec()
+        # La bascule de langue faite depuis la notice remonte par i18n.notifier,
+        # qui retraduit aussi bien le dialogue que cette fenêtre.
+        PrivacyDialog(self, startup=startup).exec()
 
     def check_authorization(self):
         """Applique le garde-fou d'usage decrit dans apps/authorization.py.
@@ -254,21 +300,26 @@ class VideoAnonymizer(QMainWindow):
         if is_authorized(domain, authorized_domains):
             return True
         self.logger.warning(f"Unauthorized domain: {domain!r}")
-        QMessageBox.warning(self, "Warning", "You are not authorized to use this application.")
+        QMessageBox.warning(self, tr("warning_title"), tr("warn_not_authorized"))
         return False
 
     def select_video(self):
         if hasattr(self, 'worker') and self.worker.isRunning():
-            QMessageBox.warning(self, "Warning", "Anonymization is in progress. Please stop it first.")
+            QMessageBox.warning(self, tr("warning_title"), tr("warn_in_progress"))
             return
         options = QFileDialog.Options()
-        self.video_path, _ = QFileDialog.getOpenFileName(self, "Select Video", "", "Video Files (*.mp4 *.avi *.mov *.mkv)", options=options)
-        self.video_label.setText(os.path.basename(self.video_path))
+        self.video_path, _ = QFileDialog.getOpenFileName(
+            self, tr("select_video_dialog"), "", tr("video_filter"), options=options)
+        # Le libelle est reconstruit depuis video_path, y compris quand la
+        # selection est annulee : il annoncait jusqu'ici un nom de fichier vide.
+        self.video_label.setText(
+            os.path.basename(self.video_path) if self.video_path
+            else tr("no_video_selected"))
         if self.video_path:
             self.cap = cv2.VideoCapture(self.video_path)
             self.timer.start(30)
         else:
-            QMessageBox.warning(self, "Warning", "No video selected.")
+            QMessageBox.warning(self, tr("warning_title"), tr("no_video_selected"))
 
     def start_anonymization(self):
         # self.ffmpeg_path = self.get_ffmpeg_path()
@@ -290,6 +341,8 @@ class VideoAnonymizer(QMainWindow):
             self.worker.use_pose = self.pose_checkbox.isChecked()
             self.worker.replacewith = replacewith
             self._worker_error = None
+            self._notification = None
+            self.notification_label.setText("")
             self.worker.progress_updated.connect(self.update_progress)
             self.worker.time_remaining_updated.connect(self.update_time)
             self.worker.anonymization_complete.connect(self.anonymization_complete)
@@ -309,7 +362,7 @@ class VideoAnonymizer(QMainWindow):
             self.yunet_checkbox.setEnabled(False)
             self.pose_checkbox.setEnabled(False)
         else:
-            QMessageBox.warning(self, "Warning", "Please select a video first.")
+            QMessageBox.warning(self, tr("warning_title"), tr("warn_select_first"))
 
     def update_checkboxes(self, checked):
         if checked:
@@ -407,9 +460,8 @@ class VideoAnonymizer(QMainWindow):
             self.yunet_checkbox.setEnabled(True)
             self.pose_checkbox.setEnabled(True)
             self.play_button.setEnabled(True)  # Enable play button after stopping
-            self.play_button.setText("Play Preview")
-
             self.is_playing = False
+            self.play_button.setText(tr("play_preview"))
 
     def get_ffmpeg_path(self):
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), "res/ffmpeg", "bin")
@@ -417,14 +469,9 @@ class VideoAnonymizer(QMainWindow):
     def update_progress(self, progress):
         self.progress_bar.setValue(progress)
 
-    # def update_time(self, remaining_time):
-        # self.time_label.setText(f"Estimated Time Remaining: {remaining_time} seconds")
-
     def update_time(self, remaining_time):
-        hours, remainder = divmod(remaining_time, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        time_str = f"Estimated Time Remaining: {int(hours)}h {int(minutes)}m {int(seconds)}s"
-        self.time_label.setText(time_str)
+        self._remaining_seconds = remaining_time
+        self.time_label.setText(self.time_remaining_text())
 
     def on_worker_error(self, message):
         """Affiche une erreur remontee par le thread de traitement.
@@ -434,13 +481,12 @@ class VideoAnonymizer(QMainWindow):
         """
         self._worker_error = message
         self.logger.error(f'Anonymization failed for {self.video_path}: {message}')
-        QMessageBox.critical(self, "Error", message)
+        QMessageBox.critical(self, tr("error_title"), message)
 
     def anonymization_complete(self):
-        if self._worker_error:
-            self.notification_label.setText(f"Anonymization failed: {self._worker_error}")
-        else:
-            self.notification_label.setText("Anonymization complete.")
+        self._notification = "failed" if self._worker_error else "complete"
+        self.notification_label.setText(self.notification_text())
+        if not self._worker_error:
             self.logger.info(f'Anonymization complete for {self.video_path}, time remaining : {self.time_label.text()}')
         self.select_button.setEnabled(True)
         self.pause_button.setEnabled(False)
@@ -457,8 +503,8 @@ class VideoAnonymizer(QMainWindow):
         self.mask_checkbox.setEnabled(True)
         self.mosaic_checkbox.setEnabled(True)
         self.format_combo.setEnabled(True)
-        self.play_button.setText("Play Preview")
         self.is_playing = False
+        self.play_button.setText(tr("play_preview"))
 
     def update_frame(self, frame=None, rotate_code=None):
         if not self.pause_updates and frame is not None:
@@ -518,8 +564,8 @@ class VideoAnonymizer(QMainWindow):
             self.worker.start()
             self.timer.timeout.connect(self.update_frame)
             self.timer.start(30)
-            self.play_button.setText("Stop Preview")
             self.is_playing = True
+            self.play_button.setText(tr("stop_preview"))
             self.stop_button.setEnabled(False)
             self.select_button.setEnabled(False)
             self.format_combo.setEnabled(False)
@@ -530,7 +576,7 @@ class VideoAnonymizer(QMainWindow):
             self.yunet_checkbox.setEnabled(False)
             self.pose_checkbox.setEnabled(False)
         else:
-            QMessageBox.warning(self, "Warning", "Please select a video first.")
+            QMessageBox.warning(self, tr("warning_title"), tr("warn_select_first"))
 
     def stop_preview(self):
         self.timer.stop()
@@ -539,8 +585,8 @@ class VideoAnonymizer(QMainWindow):
         self.worker.wait()
 
         self.pause_updates = True
-        self.play_button.setText("Play Preview")
         self.is_playing = False
+        self.play_button.setText(tr("play_preview"))
         self.select_button.setEnabled(True)
         self.format_combo.setEnabled(True)
         self.yolo_checkbox.setEnabled(True)

@@ -10,6 +10,9 @@ from apps.centerface import CenterFace
 from apps.yolo import YOLOModel
 from apps.pose import PoseModel
 from apps.utils import mask_boxes, merge_boxes
+# Les messages emis par error_occurred finissent dans une boite de dialogue :
+# ils suivent la langue de l'interface, comme le reste des textes visibles.
+from apps.i18n import tr
 import logging
 
 
@@ -45,7 +48,7 @@ class AnonymizationWorker(QThread):
         try:
             cap = cv2.VideoCapture(self.video_path, cv2.CAP_FFMPEG, (cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY))
             if not cap.isOpened():
-                self.error_occurred.emit(f"Ouverture du fichier video impossible : {self.video_path}")
+                self.error_occurred.emit(tr("err_open_input", path=self.video_path))
                 return
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -138,7 +141,7 @@ class AnonymizationWorker(QThread):
                         out_size = (frame.shape[1], frame.shape[0])
                         out = cv2.VideoWriter(output_name, fourcc, fps, out_size)
                         if not out.isOpened():
-                            self.error_occurred.emit(f"Ouverture du fichier de sortie impossible : {output_name}")
+                            self.error_occurred.emit(tr("err_open_output", path=output_name))
                             return
                         self.logger.info(
                             f"Writer ouvert en {out_size[0]}x{out_size[1]} "
@@ -146,9 +149,10 @@ class AnonymizationWorker(QThread):
                     # write() renvoie False quand la frame est refusee (OpenCV >= 5).
                     # Sans ce controle, l'echec produit un fichier vide en silence.
                     if out.write(frame) is False:
-                        raise RuntimeError(
-                            f"Frame {frame_count} refusee par le writer : "
-                            f"{frame.shape[1]}x{frame.shape[0]} au lieu de {out_size[0]}x{out_size[1]}")
+                        raise RuntimeError(tr(
+                            "err_frame_rejected", frame=frame_count,
+                            width=frame.shape[1], height=frame.shape[0],
+                            expected_width=out_size[0], expected_height=out_size[1]))
                 frame_count += 1
                 self.frame_emited.emit(frame, rotate_code)
                 # Update progress bar

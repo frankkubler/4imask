@@ -12,7 +12,7 @@
 4iMask Anonymizer est un logiciel de bureau qui détecte les visages présents dans un
 fichier vidéo et les masque (floutage, mosaïque ou pavé opaque) afin de produire une
 copie moins identifiante de la vidéo d'origine. Une option complémentaire
-(*Back-facing (pose)*) permet de masquer également les têtes des personnes vues de dos,
+(*Personnes de dos (pose)*) permet de masquer également les têtes des personnes vues de dos,
 qu'aucun détecteur de visage ne peut trouver.
 
 > **Périmètre du masquage : les visages et les têtes, rien d'autre.**
@@ -123,7 +123,7 @@ Aucun modèle de détection n'atteint 100 % de rappel. Sont fréquemment manqué
 - les visages flous, sous-exposés, en contre-jour ou en mouvement rapide ;
 - les visages partiellement occultés (masque, casque, main, reflet).
 
-L'option *Back-facing (pose)* couvre spécifiquement les personnes de dos, que les trois
+L'option *Personnes de dos (pose)* couvre spécifiquement les personnes de dos, que les trois
 détecteurs de visage ne peuvent pas trouver. Elle s'ajoute au détecteur de visage sans le
 remplacer, et ralentit le traitement. **Elle est désactivée par défaut** : si la scène
 comporte des personnes filmées de dos, elle doit être activée explicitement.
@@ -136,11 +136,11 @@ la scène comporte des personnes en arrière-plan.
 
 | Option | Robustesse | Remarque |
 |---|---|---|
-| **Mask** (pavé opaque) | La plus élevée | L'information sous le pavé est détruite. |
+| **Pavé opaque** | La plus élevée | L'information sous le pavé est détruite. |
 | **Mosaic** (pixellisation) | Moyenne | Une pixellisation grossière conserve des informations exploitables par reconstruction. |
 | **Blur** (flou) | La plus faible | Un flou léger peut être partiellement inversé ; augmenter la taille de masque renforce l'effet sans le garantir. |
 
-Pour une diffusion externe ou une publication, l'option **Mask** est recommandée.
+Pour une diffusion externe ou une publication, l'option **Pavé opaque** est recommandée.
 
 L'option de pose déduit la position de la tête à partir de la posture. Lorsque celle-ci
 ne permet pas de la situer, c'est la partie haute de la personne qui est masquée : le
@@ -181,7 +181,7 @@ base légale, durée de conservation, sécurité, droits des personnes.
    changements de plan, des entrées de champ, des mouvements rapides et pour les
    personnes filmées de dos ;
 3. vérifier les éléments identifiants listés au 6.3 ;
-4. en cas de doute, retraiter en résolution supérieure ou en option **Mask**, ou
+4. en cas de doute, retraiter en résolution supérieure ou en option **Pavé opaque**, ou
    compléter par un masquage manuel dans un logiciel de montage ;
 5. tracer ce contrôle si la vidéo est destinée à une diffusion large.
 
@@ -287,15 +287,17 @@ l'utilisateur directement dans l'interface :
   est écrit sur le disque, ce que l'application ne fait pas et les limites du masquage ;
 - le lien **« Confidentialité / RGPD »** en bas de fenêtre permet de rouvrir cette
   notice à tout moment et d'ouvrir le présent document ;
-- un **sélecteur de langue** (français / anglais) permet d'afficher l'ensemble de cette
-  information dans l'une ou l'autre langue. La langue initiale suit la locale du poste ;
-  le choix de l'utilisateur est conservé et détermine également la version du document
-  complet ouverte depuis la notice.
+- un **drapeau cliquable** en bas de fenêtre bascule l'intégralité de l'interface entre
+  le français et l'anglais, cette information comprise. Le drapeau affiché est celui de
+  la langue active. La langue initiale suit la locale du poste ; le choix de
+  l'utilisateur est conservé et détermine également la version du document complet
+  ouverte depuis la notice.
 
-Le texte affiché est maintenu dans `apps/privacy.py` et doit rester cohérent avec ce
-document et sa version anglaise `docs/GDPR.md` : toute modification de fond doit être
-répercutée dans les deux langues et dans les deux documents, avec incrémentation de
-`NOTICE_VERSION` afin que les utilisateurs revoient la notice.
+Le texte de la notice est maintenu dans `apps/privacy.py`, les libellés de l'interface
+dans `apps/i18n.py`. Ils doivent rester cohérents avec ce document et sa version anglaise
+`docs/GDPR.md` : toute modification de fond doit être répercutée dans les deux langues et
+dans les deux documents, avec incrémentation de `NOTICE_VERSION` afin que les
+utilisateurs revoient la notice.
 
 ---
 

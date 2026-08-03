@@ -5,32 +5,32 @@ Le texte affiché ici est le résumé opérationnel de `docs/RGPD.md` (fr) et
 deux langues et dans les deux documents, puis s'accompagner d'une
 incrémentation de NOTICE_VERSION afin que les utilisateurs ayant masqué la
 notice la revoient une fois.
+
+Seuls les contenus de la notice vivent ici. Les libellés de la fenêtre (titre,
+boutons, cases) sont dans `apps/i18n.py` avec le reste de l'interface, de même
+que le choix de la langue.
 """
 
 import logging
 import os
 
-from PySide6.QtCore import QLocale, QSettings, QUrl, Qt, Signal
+from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
+    QCheckBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QTextBrowser, QVBoxLayout)
 
+from apps import i18n
+from apps.flags import LanguageFlagButton
+from apps.i18n import FALLBACK_LANGUAGE, LANGUAGES, tr
 from apps.utils import resource_path
 
 logger = logging.getLogger(__name__)
 
-ORGANISATION_NAME = "4iTEC"
-APPLICATION_NAME = "4iMask Anonymizer"
 SETTINGS_ACK_KEY = "privacy/notice_acknowledged_version"
-SETTINGS_LANG_KEY = "privacy/language"
 
 # À incrémenter à chaque modification de fond de la notice.
 NOTICE_VERSION = 1
-
-# Langues disponibles pour l'information RGPD : (code, libellé affiché).
-LANGUAGES = (("fr", "Français"), ("en", "English"))
-FALLBACK_LANGUAGE = "en"
 
 DOCUMENT_FILENAMES = {"fr": "RGPD.md", "en": "GDPR.md"}
 
@@ -38,7 +38,7 @@ DOCUMENT_FILENAMES = {"fr": "RGPD.md", "en": "GDPR.md"}
 SHORT_NOTICE = {
     "fr": (
         "4iMask masque uniquement les visages, et les têtes vues de dos lorsque l'option "
-        "« Back-facing (pose) » est activée. Aucun autre élément identifiant — silhouette, "
+        "« Personnes de dos (pose) » est activée. Aucun autre élément identifiant — silhouette, "
         "plaque d'immatriculation, badge, écran, document — n'est traité. Traitement "
         "100 % local, aucune donnée ne quitte ce poste. Contrôlez la vidéo produite avant "
         "toute diffusion."
@@ -59,7 +59,7 @@ FULL_NOTICE_HTML = {
       ni la supprimer</b>.</li>
   <li>Un modèle de détection embarqué localise les <b>visages</b> présents dans chaque
       image.</li>
-  <li>Si l'option <i>Back-facing (pose)</i> est activée, un second modèle repère les
+  <li>Si l'option <i>Personnes de dos (pose)</i> est activée, un second modèle repère les
       personnes et leur posture afin de situer <b>la tête même de dos</b>, là où aucun
       détecteur de visage ne voit quoi que ce soit. Les points de posture servent
       uniquement à placer le masque : ils sont calculés en mémoire et ne sont jamais
@@ -113,8 +113,8 @@ enregistrées.</p>
   <li>La détection n'est jamais exhaustive : visages de profil, éloignés, flous ou
       partiellement cachés peuvent être manqués. Une résolution de sortie plus élevée
       améliore la détection des personnes en arrière-plan.</li>
-  <li>Le flou et la mosaïque atténuent l'information sans la détruire ; le pavé opaque
-      (<i>Mask</i>) est l'option la plus robuste pour une diffusion externe.</li>
+  <li>Le flou et la mosaïque atténuent l'information sans la détruire ; le
+      <i>Pavé opaque</i> est l'option la plus robuste pour une diffusion externe.</li>
   <li>L'option de pose déduit la position de la tête ; lorsque la posture ne permet pas
       de la situer, c'est la partie haute de la personne qui est masquée. Le masque peut
       donc être plus large que la tête — un excès volontaire, préférable à une tête
@@ -183,8 +183,8 @@ following remain fully visible in the produced video:</p>
   <li>Detection is never exhaustive: faces in profile, far away, blurred or partially
       hidden may be missed. A higher output resolution improves detection of people in
       the background.</li>
-  <li>Blur and mosaic attenuate information without destroying it; the solid box
-      (<i>Mask</i>) is the most robust option for external release.</li>
+  <li>Blur and mosaic attenuate information without destroying it; the
+      <i>Solid box</i> is the most robust option for external release.</li>
   <li>The pose option infers the position of the head; when posture does not allow it to
       be located, the upper part of the person is masked instead. The mask may therefore
       be wider than the head — deliberate over-masking, preferable to leaving a head
@@ -199,89 +199,28 @@ no longer needed. The full GDPR document covers these points.</p>
 """,
 }
 
-UI_TEXT = {
-    "fr": {
-        "dialog_title": "Confidentialité et protection des données",
-        "language_label": "Langue :",
-        "dont_show": "J'ai lu cette information, ne plus l'afficher au démarrage",
-        "open_document": "Ouvrir le document RGPD complet",
-        "close": "J'ai compris",
-        "missing_title": "Document indisponible",
-        "missing_body": (
-            "Le document RGPD complet n'a pas été trouvé sur ce poste.\n"
-            "Il est consultable dans le dépôt du projet, fichier docs/RGPD.md."),
-        "link": "Confidentialité / RGPD",
-    },
-    "en": {
-        "dialog_title": "Privacy and data protection",
-        "language_label": "Language:",
-        "dont_show": "I have read this information, do not show it at startup again",
-        "open_document": "Open the full GDPR document",
-        "close": "I understand",
-        "missing_title": "Document unavailable",
-        "missing_body": (
-            "The full GDPR document was not found on this machine.\n"
-            "It is available in the project repository, file docs/GDPR.md."),
-        "link": "Privacy / GDPR",
-    },
-}
-
-
-def _settings():
-    return QSettings(ORGANISATION_NAME, APPLICATION_NAME)
-
-
-def available_languages():
-    return LANGUAGES
-
-
-def system_language():
-    """Langue de l'information déduite de la locale du poste."""
-    code = QLocale.system().name().split("_")[0].lower()
-    return code if code in dict(LANGUAGES) else FALLBACK_LANGUAGE
-
-
-def current_language():
-    stored = _settings().value(SETTINGS_LANG_KEY)
-    if stored in dict(LANGUAGES):
-        return stored
-    return system_language()
-
-
-def set_language(language):
-    if language not in dict(LANGUAGES):
-        raise ValueError(f"Langue non gérée : {language!r}")
-    _settings().setValue(SETTINGS_LANG_KEY, language)
-
-
-def text(key, language=None):
-    """Chaîne d'interface, avec repli sur l'anglais si une clé manque."""
-    language = language or current_language()
-    return UI_TEXT.get(language, UI_TEXT[FALLBACK_LANGUAGE]).get(
-        key, UI_TEXT[FALLBACK_LANGUAGE][key])
-
 
 def short_notice(language=None):
-    language = language or current_language()
+    language = language or i18n.current_language()
     return SHORT_NOTICE.get(language, SHORT_NOTICE[FALLBACK_LANGUAGE])
 
 
 def full_notice_html(language=None):
-    language = language or current_language()
+    language = language or i18n.current_language()
     return FULL_NOTICE_HTML.get(language, FULL_NOTICE_HTML[FALLBACK_LANGUAGE])
 
 
 def should_show_notice():
     """Vrai tant que l'utilisateur n'a pas acquitté la version courante."""
     try:
-        acknowledged = int(_settings().value(SETTINGS_ACK_KEY, 0))
+        acknowledged = int(i18n.settings().value(SETTINGS_ACK_KEY, 0))
     except (TypeError, ValueError):
         acknowledged = 0
     return acknowledged < NOTICE_VERSION
 
 
 def acknowledge_notice():
-    _settings().setValue(SETTINGS_ACK_KEY, NOTICE_VERSION)
+    i18n.settings().setValue(SETTINGS_ACK_KEY, NOTICE_VERSION)
 
 
 def privacy_document_path(language=None):
@@ -289,7 +228,7 @@ def privacy_document_path(language=None):
 
     Repli sur l'autre langue si la traduction demandée n'est pas livrée.
     """
-    language = language or current_language()
+    language = language or i18n.current_language()
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ordered = [language] + [code for code, _ in LANGUAGES if code != language]
     for code in ordered:
@@ -307,27 +246,26 @@ def privacy_document_path(language=None):
 class PrivacyDialog(QDialog):
     """Notice d'information RGPD, affichée au premier lancement et à la demande."""
 
-    language_changed = Signal(str)
-
     def __init__(self, parent=None, startup=False):
         super().__init__(parent)
         self.setMinimumSize(680, 560)
+        # Le dialogue a un parent : sans cet attribut, chaque ouverture laisserait
+        # une instance vivante, abonnée au signal de langue et retraduite dans le vide.
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
-        self.language = current_language()
+        self.language = i18n.current_language()
 
         layout = QVBoxLayout(self)
 
         language_line = QHBoxLayout()
-        self.language_label = QLabel()
-        language_line.addWidget(self.language_label)
-        self.language_combo = QComboBox()
-        for code, label in LANGUAGES:
-            self.language_combo.addItem(label, code)
-        self.language_combo.setCurrentIndex(self.language_combo.findData(self.language))
-        self.language_combo.currentIndexChanged.connect(self.on_language_changed)
-        language_line.addWidget(self.language_combo)
         language_line.addStretch(1)
+        # Le drapeau est le même qu'en fenêtre principale : la notice peut donc
+        # être basculée sans la fermer, ce qui compte au premier lancement où
+        # elle s'ouvre avant tout autre écran.
+        self.language_button = LanguageFlagButton(self)
+        language_line.addWidget(self.language_button)
         layout.addLayout(language_line)
+        i18n.notifier.language_changed.connect(self.on_language_changed)
 
         self.header = QLabel()
         self.header.setWordWrap(True)
@@ -357,31 +295,25 @@ class PrivacyDialog(QDialog):
         self.retranslate()
 
     def retranslate(self):
-        self.setWindowTitle(text("dialog_title", self.language))
-        self.language_label.setText(text("language_label", self.language))
+        self.setWindowTitle(tr("privacy_dialog_title", self.language))
         self.header.setText(short_notice(self.language))
         self.body.setHtml(full_notice_html(self.language))
-        self.document_button.setText(text("open_document", self.language))
-        self.close_button.setText(text("close", self.language))
+        self.document_button.setText(tr("privacy_open_document", self.language))
+        self.close_button.setText(tr("privacy_close", self.language))
         if self.dont_show_checkbox is not None:
-            self.dont_show_checkbox.setText(text("dont_show", self.language))
+            self.dont_show_checkbox.setText(tr("privacy_dont_show", self.language))
 
-    def on_language_changed(self, index):
-        language = self.language_combo.itemData(index)
-        if not language or language == self.language:
-            return
+    def on_language_changed(self, language):
         self.language = language
-        set_language(language)
         self.retranslate()
-        self.language_changed.emit(language)
 
     def open_document(self):
         path = privacy_document_path(self.language)
         if path is None:
             self.logger.warning("Document RGPD introuvable dans le livrable.")
             QMessageBox.information(
-                self, text("missing_title", self.language),
-                text("missing_body", self.language))
+                self, tr("privacy_missing_title", self.language),
+                tr("privacy_missing_body", self.language))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
