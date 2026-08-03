@@ -62,12 +62,36 @@ no restriction applies. The check is a usage guard, not a security measure: the
 list ships inside the binary and the environment variable it reads is
 user-controlled.
 
+## Data protection (GDPR / RGPD)
+4iMask processes video that may contain identifiable people. Everything runs locally:
+no video, image or usage data ever leaves the machine, and no network connection is made.
+The models locate faces, people and posture points — they identify nobody and build no
+biometric template.
+
+**Masking covers detected faces, plus heads when the `Back-facing (pose)` option is
+enabled — nothing else.** Silhouettes, tattoos, badges, licence plates, screens and
+documents remain fully visible in the output. Hiding those requires manual editing.
+
+**The output must not be assumed anonymous without review.** Detection is never
+exhaustive, and blur and mosaic reduce information without destroying it. Always watch
+the produced video before releasing it.
+
+The application shows this information to the user: a permanent banner in the main
+window, a detailed notice on first launch, and a *Privacy / GDPR* link to reopen it at
+any time. All of it is available **in French and in English**, selectable from the main
+window; the initial language follows the machine locale (see `apps/privacy.py`).
+
+Full data-protection assessment — data processed, retention, roles, limits of the
+anonymisation and the controller's obligations:
+**[docs/GDPR.md](./docs/GDPR.md)** (English) · **[docs/RGPD.md](./docs/RGPD.md)**
+(français).
+
 ## Compilation
 The Windows executable is built by the `PyInstaller build` GitHub workflow on every `v*` tag.
 To build locally:
 ```sh
 uv sync --group dev
-uv run pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --icon "res/icons/4itec.ico" --hidden-import ultralytics --hidden-import skimage._shared.geometry --collect-submodules openvino --collect-binaries openvino --collect-data openvino --splash "res/icons/4itec.png"
+uv run pyinstaller 4imask_anonymizer.py --noconsole --add-data "res:res" --add-data "docs:docs" --add-data "LICENSE:." --add-data "pyproject.toml:." --icon "res/icons/4imask.ico" --hidden-import ultralytics --hidden-import skimage._shared.geometry --collect-submodules openvino --collect-binaries openvino --collect-data openvino --splash "res/icons/splash.png"
 ```
 
 ## Contribute
