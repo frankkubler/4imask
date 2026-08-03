@@ -15,6 +15,9 @@ from apps.utils import resource_path
 from apps.version import get_version, get_copyright_years
 from apps.authorization import (
     AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
+from apps.privacy import (
+    LANGUAGES, PrivacyDialog, current_language, set_language, short_notice,
+    should_show_notice, text as privacy_text)
 import logging
 from datetime import datetime
 import platform
@@ -50,6 +53,14 @@ class VideoAnonymizer(QMainWindow):
 
         self.layout = QVBoxLayout()
         self.central_widget.setLayout(self.layout)
+
+        self.privacy_banner = QLabel(short_notice())
+        self.privacy_banner.setWordWrap(True)
+        self.privacy_banner.setObjectName("privacyBanner")
+        self.privacy_banner.setStyleSheet(
+            "#privacyBanner { background-color: #fff8e1; color: #5c4600;"
+            " border: 1px solid #e0b400; border-radius: 4px; padding: 6px; }")
+        self.layout.addWidget(self.privacy_banner)
 
         self.select_button = QPushButton("Select Video")
         self.select_button.clicked.connect(self.select_video)
@@ -158,10 +169,26 @@ class VideoAnonymizer(QMainWindow):
         self.license_link.setOpenExternalLinks(False)
         self.license_link.linkActivated.connect(self.open_license)
 
+        # Accès permanent à l'information RGPD (transparence, art. 5.1.a RGPD)
+        self.privacy_link = QLabel()
+        self.privacy_link.setOpenExternalLinks(False)
+        self.privacy_link.linkActivated.connect(self.show_privacy_notice)
+
+        # Langue de l'information RGPD (le reste de l'interface est en anglais)
+        self.language_combo = QComboBox()
+        for code, label in LANGUAGES:
+            self.language_combo.addItem(label, code)
+        self.language_combo.setCurrentIndex(self.language_combo.findData(current_language()))
+        self.language_combo.currentIndexChanged.connect(self.on_language_changed)
+
         self.version_label = QLabel(
             f"{get_copyright_years()} 4iMask Anonymizer Version: {self.version}")
         last_line.addWidget(self.version_label)
+        last_line.addStretch(1)
+        last_line.addWidget(self.language_combo)
+        last_line.addWidget(self.privacy_link)
         last_line.addWidget(self.license_link)
+        last_line.setAlignment(self.privacy_link, Qt.AlignRight)
         last_line.setAlignment(self.license_link, Qt.AlignRight)
         self.layout.addLayout(last_line)
         # self.anonymized_label = QLabel("Anonymized Video")
@@ -176,6 +203,41 @@ class VideoAnonymizer(QMainWindow):
         # self.timer.timeout.connect(self.update_frame)
         self.pause_updates = False
         self.is_playing = False
+
+        self.refresh_privacy_texts()
+
+        # Affichée une fois la fenêtre peinte, au démarrage de la boucle d'évènements.
+        QTimer.singleShot(0, self.maybe_show_privacy_notice)
+
+    def refresh_privacy_texts(self):
+        """Réapplique le bandeau et le lien RGPD dans la langue courante."""
+        self.privacy_banner.setText(short_notice())
+        self.privacy_link.setText(f'<a href="#">{privacy_text("link")}</a>')
+
+    def on_language_changed(self, index):
+        language = self.language_combo.itemData(index)
+        if language:
+            set_language(language)
+            self.refresh_privacy_texts()
+
+    def on_dialog_language_changed(self, language):
+        """La langue choisie depuis la notice est reportée sur la fenêtre."""
+        index = self.language_combo.findData(language)
+        if index >= 0:
+            self.language_combo.blockSignals(True)
+            self.language_combo.setCurrentIndex(index)
+            self.language_combo.blockSignals(False)
+        self.refresh_privacy_texts()
+
+    def maybe_show_privacy_notice(self):
+        """Notice RGPD au premier lancement, ou après évolution de son contenu."""
+        if should_show_notice():
+            self.show_privacy_notice(startup=True)
+
+    def show_privacy_notice(self, _link=None, startup=False):
+        dialog = PrivacyDialog(self, startup=startup)
+        dialog.language_changed.connect(self.on_dialog_language_changed)
+        dialog.exec()
 
     def check_authorization(self):
         """Applique le garde-fou d'usage decrit dans apps/authorization.py.

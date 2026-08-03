@@ -44,6 +44,9 @@ jobs:
           --name 4imask_anonymizer
           --noconsole
           --add-data "res:res"
+          --add-data "docs:docs"
+          --add-data "LICENSE:."
+          --add-data "pyproject.toml:."
           --icon "res/icons/4imask.ico"
           --hidden-import ultralytics
           --hidden-import skimage._shared.geometry
