@@ -11,7 +11,9 @@ tout depuis les tests fonctionnels :
 
 import ast
 import importlib
+import inspect
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -70,6 +72,44 @@ def test_le_message_est_dessine_sur_l_image(application):
     ecran.close()
 
 
+# --- Attente du premier rendu -----------------------------------------------
+
+def test_l_ecran_affiche_est_bien_peint(application):
+    ecran = Splash(ratio=1.0)
+    ecran.show()
+    assert ecran.wait_until_visible(timeout_ms=2000)
+    ecran.close()
+
+
+def test_l_attente_rend_la_main_si_rien_n_est_peint(application):
+    """Sans plafond, une plateforme sans rendu bloquerait le demarrage."""
+    ecran = Splash(ratio=1.0)  # jamais affiche, donc jamais peint
+    debut = time.monotonic()
+    assert not ecran.wait_until_visible(timeout_ms=100)
+    assert time.monotonic() - debut < 1.0
+
+
+def appels_dans_mainloop():
+    """Noms des fonctions appelees dans mainloop, dans l'ordre du code."""
+    arbre = ast.parse(POINT_ENTREE.read_text(encoding="utf-8"))
+    corps = next(n for n in arbre.body
+                 if isinstance(n, ast.FunctionDef) and n.name == "mainloop")
+    appels = []
+    for noeud in ast.walk(corps):
+        if isinstance(noeud, ast.Call):
+            cible = noeud.func
+            nom = getattr(cible, "attr", None) or getattr(cible, "id", None)
+            if nom:
+                appels.append((noeud.lineno, nom))
+    return [nom for _, nom in sorted(appels)]
+
+
+def test_l_ecran_est_peint_avant_le_chargement():
+    """Sans cette attente, il n'apparait qu'une fois le chargement fini."""
+    appels = appels_dans_mainloop()
+    assert appels.index("wait_until_visible") < appels.index("load_processing")
+
+
 # --- Ordonnancement du demarrage --------------------------------------------
 
 def imports_de_niveau_module():
@@ -83,9 +123,26 @@ def imports_de_niveau_module():
     return noms
 
 
-def test_le_moteur_reste_charge_a_la_demande():
-    """Importe au niveau module, il s'ouvrirait avant que l'ecran soit affiche."""
-    assert "apps.worker" not in imports_de_niveau_module()
+# Ce qui coute le plus cher au demarrage. Importe en tete de fichier, chacun
+# retarde d'autant le moment ou l'ecran de demarrage devient visible.
+MODULES_DIFFERES = ("apps.worker", "cv2", "qdarktheme")
+
+
+@pytest.mark.parametrize("module", MODULES_DIFFERES)
+def test_les_modules_lents_restent_charges_a_la_demande(module):
+    """Importes au niveau module, ils s'ouvriraient avant l'affichage de l'ecran."""
+    assert module not in imports_de_niveau_module()
+
+
+def test_les_reglages_hidpi_ne_dependent_pas_de_qdarktheme():
+    """Ils precedent QApplication : les prendre a qdarktheme le rendrait bloquant."""
+    module = importlib.import_module("4imask_anonymizer")
+    source = inspect.getsource(module.enable_hi_dpi)
+    # La docstring cite qdarktheme pour expliquer l'absence de l'import : c'est
+    # le code seul qui doit en etre exempt.
+    code = source.replace(module.enable_hi_dpi.__doc__ or "", "")
+    assert "qdarktheme" not in code
+    assert "HighDpiScaleFactorRoundingPolicy" in code
 
 
 def commande_pyinstaller_courante():

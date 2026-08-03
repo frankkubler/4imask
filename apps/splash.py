@@ -11,14 +11,20 @@ n'aurait plus rien à montrer.
 """
 
 import logging
+import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEventLoop, Qt
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from apps.utils import resource_path
 
 logger = logging.getLogger(__name__)
+
+# Delai maximal d'attente du premier rendu. Largement au-dessus du temps observe
+# (quelques dizaines de millisecondes) : il ne sert qu'a ne pas bloquer le
+# demarrage si le rendu n'arrive jamais, sur une plateforme sans affichage.
+WAIT_TIMEOUT_MS = 1000
 
 # Même image en deux définitions : la seconde évite un rendu flou sur les écrans
 # à forte densité. Ordre décroissant, la première dont le facteur convient gagne.
@@ -67,6 +73,32 @@ class Splash(QSplashScreen):
         # déjà l'écran au-dessus, et forcer davantage ferait passer une boîte de
         # dialogue ouverte pendant le démarrage derrière lui.
         super().__init__(splash_pixmap(ratio))
+        self._painted = False
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        self._painted = True
+
+    def wait_until_visible(self, timeout_ms=WAIT_TIMEOUT_MS):
+        """Rend la main une fois l'écran réellement peint, ou après le délai.
+
+        Indispensable avant un chargement qui bloque la boucle d'évènements :
+        sous Wayland comme sous X11 avec compositeur, la fenêtre n'est peinte
+        qu'au terme d'un échange avec le compositeur, que `show()` seul ne
+        déclenche pas. Sans cette attente, l'écran de démarrage n'apparaissait
+        qu'une fois le chargement terminé — juste avant la fenêtre principale,
+        donc pour rien.
+
+        Renvoie True si l'écran a bien été peint dans le délai imparti.
+        """
+        limite = time.monotonic() + timeout_ms / 1000
+        while not self._painted and time.monotonic() < limite:
+            QApplication.processEvents(QEventLoop.AllEvents, 20)
+        if not self._painted:
+            logger.warning(
+                "Écran de démarrage non peint après %d ms, chargement poursuivi.",
+                timeout_ms)
+        return self._painted
 
     @staticmethod
     def close_all():

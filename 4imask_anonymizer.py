@@ -1,50 +1,82 @@
 import apps.compat  # noqa: F401  must stay first, see apps/compat.py
 import sys
-import cv2
-import qdarktheme
 import os
-from PySide6.QtWidgets import (
+import time
+
+# Instant d'entree dans le module, origine des durees de demarrage journalisees.
+# Ne couvre ni le demarrage de l'interpreteur, ni le lanceur PyInstaller, qui
+# precedent la premiere ligne de code executee ici.
+STARTUP_TIME = time.perf_counter()
+
+from PySide6.QtWidgets import (  # noqa: E402
     QApplication, QMainWindow, QPushButton, QFileDialog,
     QDoubleSpinBox, QSpacerItem, QSizePolicy,
     QHBoxLayout, QVBoxLayout, QWidget, QLabel,
     QProgressBar, QComboBox, QMessageBox, QCheckBox)
-from PySide6.QtGui import QImage, QPixmap, QIcon, QDesktopServices
-from PySide6.QtCore import QTimer, QUrl, Qt
-from apps.utils import resource_path
-from apps.version import VERSION_UNKNOWN, get_version, get_copyright_years
-from apps.authorization import (
+from PySide6.QtGui import (  # noqa: E402
+    QGuiApplication, QImage, QPixmap, QIcon, QDesktopServices)
+from PySide6.QtCore import QTimer, QUrl, Qt  # noqa: E402
+from apps.utils import resource_path  # noqa: E402
+from apps.version import VERSION_UNKNOWN, get_version, get_copyright_years  # noqa: E402
+from apps.authorization import (  # noqa: E402
     AUTHORIZED_DOMAINS_FILE, DOMAIN_ENV_VAR, is_authorized, load_authorized_domains)
-from apps import i18n
-from apps.flags import LanguageFlagButton
-from apps.i18n import tr
-from apps.privacy import PrivacyDialog, short_notice, should_show_notice
-from apps.splash import Splash
-import logging
-from datetime import datetime
-import platform
+from apps import i18n  # noqa: E402
+from apps.flags import LanguageFlagButton  # noqa: E402
+from apps.i18n import tr  # noqa: E402
+from apps.privacy import PrivacyDialog, short_notice, should_show_notice  # noqa: E402
+from apps.splash import Splash  # noqa: E402
+import logging  # noqa: E402
+from datetime import datetime  # noqa: E402
+import platform  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 # Nom du produit : il reste identique dans toutes les langues.
 APPLICATION_TITLE = "4iMask Anonymizer"
 
-# apps.worker tire torch, ultralytics et openvino : environ quatre secondes,
-# l'essentiel du temps de demarrage. L'import est differe jusqu'a ce que l'ecran
-# de demarrage soit affiche (voir apps/splash.py), au lieu de le faire ici ou
-# rien n'est encore visible a l'ecran.
+# Tout ce qui suit est charge apres l'affichage de l'ecran de demarrage. Importe
+# en tete de fichier, chacun de ces modules repousserait d'autant le moment ou
+# l'utilisateur voit quelque chose : environ 4 s pour apps.worker (torch,
+# ultralytics, openvino), 0,3 s pour qdarktheme et 0,2 s pour cv2.
 AnonymizationWorker = None
+cv2 = None
 
 
 def load_processing():
-    """Charge le moteur d'anonymisation, une seule fois.
+    """Charge le moteur d'anonymisation et OpenCV, une seule fois.
 
     Appelee pendant l'ecran de demarrage dans le flux normal, et au plus tard a
     la construction de la fenetre : celle-ci reste utilisable telle quelle, sans
     passer par mainloop().
     """
-    global AnonymizationWorker
+    global AnonymizationWorker, cv2
     if AnonymizationWorker is None:
+        import cv2 as cv2_module
         from apps.worker import AnonymizationWorker as worker_class
+        cv2 = cv2_module
         AnonymizationWorker = worker_class
     return AnonymizationWorker
+
+
+def enable_hi_dpi():
+    """Réglages HiDPI, à poser avant la création de QApplication.
+
+    Reprend qdarktheme.enable_hi_dpi() sans importer qdarktheme, dont les 0,3 s
+    de chargement retarderaient l'écran de démarrage — seul le thème, appliqué
+    ensuite, a besoin de ce module. Les deux attributs d'application que
+    qdarktheme pose en plus n'existent que sur Qt5 ; sur Qt6 le HiDPI est actif
+    d'office, seule la politique d'arrondi reste utile.
+    """
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+
+def apply_theme(app):
+    """Applique le thème clair. Importe qdarktheme, d'où l'appel après le splash."""
+    import qdarktheme
+    app.setStyle('Fusion')
+    qdarktheme.setup_theme("light")
 
 
 class VideoAnonymizer(QMainWindow):
@@ -650,25 +682,37 @@ class FFmpegPathManager:
 
 
 def mainloop():
-    qdarktheme.enable_hi_dpi()
     logs_settings()
+    enable_hi_dpi()
     app = QApplication(sys.argv)
     path = resource_path("res/icons/4imask.png")
     app.setWindowIcon(QIcon(path))
-    app.setStyle('Fusion')
-    qdarktheme.setup_theme("light")
 
-    # L'ecran de demarrage couvre le chargement des modeles. Il est donc affiche
-    # avant load_processing(), et ferme par finish() une fois la fenetre peinte.
+    # L'ecran de demarrage vient avant tout le reste : ce qui est charge apres
+    # lui se fait sous les yeux de l'utilisateur, ce qui est charge avant se
+    # passe devant un ecran vide. Les durees sont journalisees pour pouvoir
+    # diagnostiquer un demarrage lent sur le poste ou il se produit.
     splash = Splash()
     splash.show()
     splash.show_message(tr("splash_loading_models"))
-    load_processing()
-    splash.show_message(tr("splash_starting"))
+    # Attendre le rendu effectif : le chargement qui suit bloque la boucle
+    # d'evenements, et l'ecran ne serait peint qu'une fois celui-ci termine.
+    splash.wait_until_visible()
+    logger.info(f"Splash displayed {time.perf_counter() - STARTUP_TIME:.2f}s after startup")
 
+    apply_theme(app)
+    step = time.perf_counter()
+    load_processing()
+    logger.info(f"Processing modules loaded in {time.perf_counter() - step:.2f}s")
+
+    splash.show_message(tr("splash_starting"))
+    step = time.perf_counter()
     window = VideoAnonymizer()
     window.show()
     splash.finish(window)
+    logger.info(
+        f"Window built in {time.perf_counter() - step:.2f}s, "
+        f"total startup {time.perf_counter() - STARTUP_TIME:.2f}s")
     sys.exit(app.exec())
 
 
